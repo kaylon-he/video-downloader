@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f4f3ef;
+  --foreground: #1d211f;
+  --color-bg: #f4f3ef;
+  --color-fg: #1d211f;
+  --color-muted: #69716b;
+  --color-surface: #ebe8df;
+  --color-panel: #fffefa;
+  --color-border: #d8d4c9;
+  --color-brand: #256f63;
+  --color-brand-strong: #184f47;
+  --color-brand-soft: #d7ece7;
+  --color-ink: #202422;
+  --color-track: #ded9ce;
+  --color-success: #2c8f5f;
+  --color-danger: #9c2f28;
+  --color-danger-bg: #fff1ef;
+  --color-danger-border: #f0c3bd;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: clip;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.status-line {
+  min-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
