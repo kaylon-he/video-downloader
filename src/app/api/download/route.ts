@@ -16,7 +16,13 @@ export async function POST(request: Request) {
   try {
     const url = await validateVideoUrl(body.url);
     const formatId = validateFormatId(body.formatId);
-    const task = await createDownloadTask({ url, formatId });
+    const task = await createDownloadTask({
+      url,
+      formatId,
+      title: stringValue(body.title, 240),
+      thumbnail: stringValue(body.thumbnail, 2048),
+      duration: numberValue(body.duration),
+    });
     return NextResponse.json(ok({ taskId: task.id, task }));
   } catch (error) {
     if (error instanceof ValidationError) {
@@ -25,4 +31,16 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "创建任务失败";
     return NextResponse.json(fail("INTERNAL_ERROR", "创建任务失败", message), { status: 500 });
   }
+}
+
+function stringValue(input: unknown, maxLength: number): string | undefined {
+  if (typeof input !== "string") {
+    return undefined;
+  }
+  const value = input.trim();
+  return value ? value.slice(0, maxLength) : undefined;
+}
+
+function numberValue(input: unknown): number | undefined {
+  return typeof input === "number" && Number.isFinite(input) ? input : undefined;
 }

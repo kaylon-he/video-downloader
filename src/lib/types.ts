@@ -51,7 +51,26 @@ export type DownloadTask = {
   eta?: string;
   filename?: string;
   fileId?: string;
+  fileSize?: number;
   error?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type HistoryItem = {
+  id: string;
+  taskId?: string;
+  url?: string;
+  title: string;
+  thumbnail?: string;
+  duration?: number;
+  status: DownloadStatus;
+  progress: number;
+  fileId?: string;
+  filename?: string;
+  fileSize?: number;
+  error?: string;
+  source: "download" | "recovered";
   createdAt: number;
   updatedAt: number;
 };
@@ -59,6 +78,9 @@ export type DownloadTask = {
 export type DownloadRequest = {
   url?: unknown;
   formatId?: unknown;
+  title?: unknown;
+  thumbnail?: unknown;
+  duration?: unknown;
 };
 
 export type ParseRequest = {

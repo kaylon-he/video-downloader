@@ -148,6 +148,45 @@ GET /api/file/1e7094be-c87a-428e-be39-36fa8b448591
 - `BAD_REQUEST`：文件 ID 格式不合法。
 - `FILE_NOT_FOUND`：文件不存在、任务未完成或文件已被清理。
 
+## GET /api/history
+
+读取历史记录。接口会返回 `storage/history.json` 中的任务历史，并扫描 `storage/` 下现有视频文件，将可识别的 UUID 文件恢复为历史记录。
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {
+        "id": "58a2...",
+        "title": "Me at the zoo",
+        "status": "done",
+        "progress": 100,
+        "fileId": "1e7094be-c87a-428e-be39-36fa8b448591",
+        "fileSize": 557428,
+        "source": "download",
+        "createdAt": 1792737453105,
+        "updatedAt": 1792737463105
+      }
+    ]
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 说明 |
+|---|---|
+| `source: "download"` | 由本应用下载任务写入的记录 |
+| `source: "recovered"` | 从 `storage/` 现有文件扫描恢复的记录 |
+| `fileId` | 可用于 `/api/file/[id]` 下载 |
+
+常见错误：
+
+- `INTERNAL_ERROR`：读取历史记录失败。
+
 ## 错误码
 
 | code | 含义 |

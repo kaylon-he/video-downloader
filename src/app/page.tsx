@@ -1,9 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type { ApiResponse, DownloadTask, VideoInfo } from "@/lib/types";
+import type { ApiResponse, DownloadTask, HistoryItem, VideoInfo } from "@/lib/types";
 
 type Phase = "idle" | "parsing" | "ready" | "starting" | "downloading" | "done" | "error";
+type Tab = "downloader" | "history";
 
 export default function Home() {
   const [url, setUrl] = useState("");
@@ -12,6 +13,9 @@ export default function Home() {
   const [task, setTask] = useState<DownloadTask | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<Tab>("downloader");
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const canDownload = Boolean(video && phase !== "starting" && phase !== "downloading");
 
@@ -43,6 +47,7 @@ export default function Home() {
       setTask(payload.data);
       if (payload.data.status === "done") {
         setPhase("done");
+        void loadHistory();
         window.clearInterval(timer);
       }
       if (payload.data.status === "failed") {
@@ -54,6 +59,16 @@ export default function Home() {
 
     return () => window.clearInterval(timer);
   }, [task]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "history") {
+      void loadHistory();
+    }
+  }, [activeTab]);
 
   async function handleParse(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -88,7 +103,13 @@ export default function Home() {
     const response = await fetch("/api/download", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: video.url, formatId }),
+      body: JSON.stringify({
+        url: video.url,
+        formatId,
+        title: video.title,
+        thumbnail: video.thumbnail,
+        duration: video.duration,
+      }),
     });
     const payload = (await response.json()) as ApiResponse<{ taskId: string; task: DownloadTask }>;
 
@@ -100,6 +121,19 @@ export default function Home() {
 
     setTask(payload.data.task);
     setPhase("downloading");
+  }
+
+  async function loadHistory() {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch("/api/history");
+      const payload = (await response.json()) as ApiResponse<{ items: HistoryItem[] }>;
+      if (payload.ok) {
+        setHistory(payload.data.items);
+      }
+    } finally {
+      setHistoryLoading(false);
+    }
   }
 
   return (
@@ -115,6 +149,16 @@ export default function Home() {
           </div>
         </header>
 
+        <div className="flex flex-wrap gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-2">
+          <TabButton active={activeTab === "downloader"} onClick={() => setActiveTab("downloader")}>
+            下载器
+          </TabButton>
+          <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>
+            历史记录
+          </TabButton>
+        </div>
+
+        {activeTab === "downloader" ? (
         <section className="grid flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-4 sm:p-6">
             <form className="flex flex-wrap gap-3" onSubmit={handleParse}>
@@ -233,8 +277,115 @@ export default function Home() {
             ) : null}
           </aside>
         </section>
+        ) : (
+          <section className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">历史记录</h2>
+                <p className="status-line text-sm text-[var(--color-muted)]">
+                  {historyLoading ? "读取中" : `${history.length} 条记录`}
+                </p>
+              </div>
+              <button
+                className="min-h-10 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-surface)]"
+                onClick={() => void loadHistory()}
+                type="button"
+              >
+                刷新
+              </button>
+            </div>
+
+            {history.length > 0 ? (
+              <div className="mt-5 grid gap-3">
+                {history.map((item) => (
+                  <HistoryRow key={item.id} item={item} />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-5 grid min-h-[320px] place-items-center rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-muted)]">
+                暂无历史记录
+              </div>
+            )}
+          </section>
+        )}
       </div>
     </main>
+  );
+}
+
+function TabButton({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`min-h-10 rounded-md px-4 text-sm font-medium transition ${
+        active
+          ? "bg-[var(--color-ink)] text-white"
+          : "text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
+function HistoryRow({ item }: { item: HistoryItem }) {
+  const canDownload = item.status === "done" && item.fileId;
+
+  return (
+    <article className="grid gap-3 rounded-md border border-[var(--color-border)] bg-white p-3 sm:grid-cols-[120px_minmax(0,1fr)_auto] sm:items-center">
+      <div className="aspect-video overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]">
+        {item.thumbnail ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img alt="" className="h-full w-full object-cover" decoding="async" src={item.thumbnail} />
+        ) : (
+          <div className="grid h-full place-items-center text-xs text-[var(--color-muted)]">Video</div>
+        )}
+      </div>
+
+      <div className="min-w-0">
+        <h3 className="truncate text-base font-semibold">{item.title}</h3>
+        <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--color-muted)]">
+          <span className="rounded-md border border-[var(--color-border)] px-2 py-1">
+            {statusLabel(item.status)}
+          </span>
+          <span className="rounded-md border border-[var(--color-border)] px-2 py-1">
+            {item.duration ? formatDuration(item.duration) : "未知时长"}
+          </span>
+          <span className="rounded-md border border-[var(--color-border)] px-2 py-1">
+            {item.fileSize ? formatBytes(item.fileSize) : item.source === "recovered" ? "本地文件" : "-"}
+          </span>
+          <span className="rounded-md border border-[var(--color-border)] px-2 py-1">
+            {new Date(item.updatedAt).toLocaleString()}
+          </span>
+        </div>
+        {item.url ? (
+          <p className="mt-2 truncate text-xs text-[var(--color-muted)]">{item.url}</p>
+        ) : null}
+        {item.error ? (
+          <p className="mt-2 [overflow-wrap:anywhere] text-xs text-[var(--color-danger)]">{item.error}</p>
+        ) : null}
+      </div>
+
+      {canDownload ? (
+        <a
+          className="flex min-h-10 items-center justify-center rounded-md bg-[var(--color-brand)] px-4 text-sm font-medium text-white transition hover:bg-[var(--color-brand-strong)]"
+          href={`/api/file/${item.fileId}`}
+        >
+          下载
+        </a>
+      ) : (
+        <span className="text-right text-sm text-[var(--color-muted)]">{Math.round(item.progress)}%</span>
+      )}
+    </article>
   );
 }
 
@@ -252,4 +403,21 @@ function formatDuration(seconds: number): string {
   const minutes = Math.floor(safeSeconds / 60);
   const rest = safeSeconds % 60;
   return `${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)}KB`;
+  }
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function statusLabel(status: DownloadTask["status"]): string {
+  const labels: Record<DownloadTask["status"], string> = {
+    pending: "排队中",
+    running: "下载中",
+    done: "已完成",
+    failed: "失败",
+  };
+  return labels[status];
 }

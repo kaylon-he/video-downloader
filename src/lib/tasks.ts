@@ -1,10 +1,10 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { updateHistoryByTaskId, upsertHistory } from "./history";
+import { getStorageDir } from "./storage";
 import { downloadVideo } from "./ytdlp";
 import type { DownloadTask } from "./types";
 
-const STORAGE_DIR = process.env.DOWNLOAD_DIR || path.join(process.cwd(), "storage");
 const MAX_CONCURRENT_DOWNLOADS = Number(process.env.MAX_CONCURRENT_DOWNLOADS || "1");
 
 type TaskStore = {
@@ -37,8 +37,11 @@ function getStore(): TaskStore {
 export async function createDownloadTask(input: {
   url: string;
   formatId?: string;
+  title?: string;
+  thumbnail?: string;
+  duration?: number;
 }): Promise<DownloadTask> {
-  await fs.mkdir(STORAGE_DIR, { recursive: true });
+  await fs.mkdir(getStorageDir(), { recursive: true });
 
   const now = Date.now();
   const task: DownloadTask = {
@@ -52,6 +55,15 @@ export async function createDownloadTask(input: {
   };
 
   store.tasks.set(task.id, task);
+  await upsertHistory({
+    taskId: task.id,
+    url: task.url,
+    title: input.title,
+    thumbnail: input.thumbnail,
+    duration: input.duration,
+    status: task.status,
+    progress: task.progress,
+  });
   store.queue.push(task.id);
   void drainQueue();
   return task;
@@ -64,10 +76,6 @@ export function getTask(taskId: string): DownloadTask | undefined {
 export function getTaskByFileId(fileId: string): DownloadTask | undefined {
   const taskId = store.fileToTask.get(fileId);
   return taskId ? store.tasks.get(taskId) : undefined;
-}
-
-export function getStorageDir(): string {
-  return STORAGE_DIR;
 }
 
 async function drainQueue(): Promise<void> {
@@ -100,7 +108,7 @@ async function runTask(task: DownloadTask): Promise<void> {
     const filename = await downloadVideo({
       url: task.url,
       formatId: task.formatId,
-      outputDir: STORAGE_DIR,
+      outputDir: getStorageDir(),
       fileBaseName: fileId,
       onProgress: (progress) => {
         updateTask(task.id, {
@@ -113,10 +121,12 @@ async function runTask(task: DownloadTask): Promise<void> {
     });
 
     store.fileToTask.set(fileId, task.id);
+    const stat = await fs.stat(filename);
     updateTask(task.id, {
       status: "done",
       progress: 100,
       filename,
+      fileSize: stat.size,
       fileId,
       updatedAt: Date.now(),
     });
@@ -134,5 +144,14 @@ function updateTask(taskId: string, patch: Partial<DownloadTask>): void {
   if (!current) {
     return;
   }
-  store.tasks.set(taskId, { ...current, ...patch });
+  const next = { ...current, ...patch };
+  store.tasks.set(taskId, next);
+  void updateHistoryByTaskId(taskId, {
+    status: next.status,
+    progress: next.progress,
+    filename: next.filename,
+    fileId: next.fileId,
+    error: next.error,
+    fileSize: next.fileSize,
+  });
 }

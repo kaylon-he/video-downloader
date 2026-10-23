@@ -50,7 +50,7 @@
 | 3.2 | 结果卡片 | 封面、标题、时长、清晰度下拉 | `components/ResultCard.tsx` | P0 | ✅ |
 | 3.3 | 下载 + 进度条 | 触发任务 → 轮询进度 | `components/DownloadButton.tsx` | P0 | ✅ |
 | 3.4 | 完成态 | 显示「保存文件」链接 | `components/DownloadButton.tsx` | P0 | ✅ |
-| 3.5 | 任务列表/历史 | 多任务与下载历史 | `components/TaskList.tsx` | P2 | ⬜ |
+| 3.5 | 任务列表/历史 | 多任务与下载历史 | `app/page.tsx`、`lib/history.ts` | P2 | ✅ |
 | 3.6 | 交互态 | 错误/加载/空态提示 | 各组件 | P1 | ✅ |
 | 3.7 | 响应式 | 移动端适配 | `globals.css` | P2 | ✅ |
 
