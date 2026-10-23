@@ -12,6 +12,12 @@ npm run dev
 
 打开 `http://localhost:3000`。
 
+如果要测试 YouTube 并读取本机 Chrome 登录态：
+
+```bash
+npm run dev:chrome
+```
+
 ## 环境变量
 
 复制 `.env.example` 为 `.env.local` 后按需调整：
@@ -33,10 +39,10 @@ YTDLP_COOKIES_FROM_BROWSER=
 如果本机 Chrome 已登录 YouTube：
 
 ```bash
-YTDLP_COOKIES_FROM_BROWSER=chrome
+npm run dev:chrome
 ```
 
-然后重启 `npm run dev`。
+该命令等价于 `YTDLP_COOKIES_FROM_BROWSER=chrome npm run dev`。
 
 命令行脚本也支持：
 

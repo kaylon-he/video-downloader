@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:chrome": "YTDLP_COOKIES_FROM_BROWSER=chrome next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
