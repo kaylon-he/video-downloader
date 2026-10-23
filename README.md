@@ -19,6 +19,12 @@
 - 支持 Chrome cookies 个人自用模式，用于 YouTube / X 等需要登录态的平台
 - 通过并发配置限制解析和下载，避免机器资源被打满
 
+## 界面预览
+
+下面截图已脱敏，视频标题、链接、缩略图和文件名均为示例内容。
+
+![任务中心界面](public/screenshots/task-center.png)
+
 ## 技术栈
 
 - Next.js 14 App Router
