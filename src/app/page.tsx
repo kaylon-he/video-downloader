@@ -233,11 +233,13 @@ function TaskCard({
   const isActive = item.status === "parsing" || item.status === "pending" || item.status === "running";
 
   return (
-    <article className="grid gap-3 rounded-md border border-[var(--color-border)] bg-white p-3 lg:grid-cols-[140px_minmax(0,1fr)_220px] lg:items-center">
+    <article className="grid gap-3 rounded-md border border-[var(--color-border)] bg-white p-3 lg:grid-cols-[140px_minmax(0,1fr)_220px] lg:items-start">
       <Thumbnail src={item.thumbnail} />
 
       <div className="min-w-0">
-        <h3 className="[overflow-wrap:anywhere] text-base font-semibold">{item.title}</h3>
+        <h3 className="line-clamp-2 min-w-0 [overflow-wrap:anywhere] text-base font-semibold leading-6">
+          {item.title}
+        </h3>
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--color-muted)]">
           <span className="rounded-md border border-[var(--color-border)] px-2 py-1">
             {statusLabel(item.status)}
@@ -266,7 +268,7 @@ function TaskCard({
         ) : null}
       </div>
 
-      <div className="grid gap-2">
+      <div className="grid min-w-0 gap-2 lg:w-[220px]">
         {canChooseFormat ? (
           <select
             className="h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 text-sm outline-none transition focus:border-[var(--color-brand)] focus:ring-4 focus:ring-[var(--color-brand-soft)]"
@@ -347,7 +349,7 @@ function PlayerDialog({ item, onClose }: { item: HistoryItem; onClose: () => voi
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6">
       <div className="w-full max-w-5xl overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] shadow-2xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--color-border)] px-4 py-3">
           <h2 className="min-w-0 truncate text-base font-semibold">{item.title}</h2>
           <button
             className="min-h-10 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-surface)]"
