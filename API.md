@@ -152,6 +152,8 @@ GET /api/file/1e7094be-c87a-428e-be39-36fa8b448591
 
 读取历史记录。接口会返回 `storage/history.json` 中的任务历史，并扫描 `storage/` 下现有视频文件，将可识别的 UUID 文件恢复为历史记录。
 
+恢复本地文件时会使用 `ffprobe` 读取时长，并使用 `ffmpeg` 生成本地缩略图。无法识别的损坏视频不会进入历史列表。
+
 成功响应：
 
 ```json
@@ -165,6 +167,8 @@ GET /api/file/1e7094be-c87a-428e-be39-36fa8b448591
         "status": "done",
         "progress": 100,
         "fileId": "1e7094be-c87a-428e-be39-36fa8b448591",
+        "thumbnail": "/api/thumbnail/1e7094be-c87a-428e-be39-36fa8b448591",
+        "duration": 19,
         "fileSize": 557428,
         "source": "download",
         "createdAt": 1792737453105,
@@ -182,10 +186,30 @@ GET /api/file/1e7094be-c87a-428e-be39-36fa8b448591
 | `source: "download"` | 由本应用下载任务写入的记录 |
 | `source: "recovered"` | 从 `storage/` 现有文件扫描恢复的记录 |
 | `fileId` | 可用于 `/api/file/[id]` 下载 |
+| `thumbnail` | 可用于展示封面；本地恢复文件会指向 `/api/thumbnail/[id]` |
 
 常见错误：
 
 - `INTERNAL_ERROR`：读取历史记录失败。
+
+## GET /api/thumbnail/[id]
+
+读取本地生成的视频缩略图。
+
+请求：
+
+```text
+GET /api/thumbnail/1e7094be-c87a-428e-be39-36fa8b448591
+```
+
+成功响应：
+
+- `200`
+- `Content-Type: image/jpeg`
+
+常见错误：
+
+- `FILE_NOT_FOUND`：缩略图不存在或文件 ID 不合法。
 
 ## 错误码
 

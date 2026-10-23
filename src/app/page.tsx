@@ -65,6 +65,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const syncTabFromUrl = () => {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      setActiveTab(tab === "history" ? "history" : "downloader");
+    };
+
+    syncTabFromUrl();
+    window.addEventListener("popstate", syncTabFromUrl);
+    return () => window.removeEventListener("popstate", syncTabFromUrl);
+  }, []);
+
+  useEffect(() => {
     if (activeTab === "history") {
       void loadHistory();
     }
@@ -136,6 +147,17 @@ export default function Home() {
     }
   }
 
+  function switchTab(nextTab: Tab) {
+    setActiveTab(nextTab);
+    const nextUrl = new URL(window.location.href);
+    if (nextTab === "history") {
+      nextUrl.searchParams.set("tab", "history");
+    } else {
+      nextUrl.searchParams.delete("tab");
+    }
+    window.history.pushState(null, "", nextUrl);
+  }
+
   return (
     <main className="min-h-screen bg-[var(--color-bg)] px-4 py-4 text-[var(--color-fg)] sm:px-6 lg:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-6xl flex-col gap-4">
@@ -150,10 +172,10 @@ export default function Home() {
         </header>
 
         <div className="flex flex-wrap gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-2">
-          <TabButton active={activeTab === "downloader"} onClick={() => setActiveTab("downloader")}>
+          <TabButton active={activeTab === "downloader"} onClick={() => switchTab("downloader")}>
             下载器
           </TabButton>
-          <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>
+          <TabButton active={activeTab === "history"} onClick={() => switchTab("history")}>
             历史记录
           </TabButton>
         </div>
@@ -342,14 +364,7 @@ function HistoryRow({ item }: { item: HistoryItem }) {
 
   return (
     <article className="grid gap-3 rounded-md border border-[var(--color-border)] bg-white p-3 sm:grid-cols-[120px_minmax(0,1fr)_auto] sm:items-center">
-      <div className="aspect-video overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]">
-        {item.thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" className="h-full w-full object-cover" decoding="async" src={item.thumbnail} />
-        ) : (
-          <div className="grid h-full place-items-center text-xs text-[var(--color-muted)]">Video</div>
-        )}
-      </div>
+      <Thumbnail src={item.thumbnail} />
 
       <div className="min-w-0">
         <h3 className="truncate text-base font-semibold">{item.title}</h3>
@@ -386,6 +401,32 @@ function HistoryRow({ item }: { item: HistoryItem }) {
         <span className="text-right text-sm text-[var(--color-muted)]">{Math.round(item.progress)}%</span>
       )}
     </article>
+  );
+}
+
+function Thumbnail({ src }: { src?: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!src || failed) {
+    return (
+      <div className="aspect-video overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <div className="grid h-full place-items-center text-xs text-[var(--color-muted)]">Video</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="aspect-video overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        alt=""
+        className="h-full w-full object-cover"
+        decoding="async"
+        loading="lazy"
+        onError={() => setFailed(true)}
+        src={src}
+      />
+    </div>
   );
 }
 
