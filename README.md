@@ -2,7 +2,9 @@
 
 自部署视频下载工具：粘贴视频链接，服务端通过 `yt-dlp` / `ffmpeg` 解析、下载、合并，并提供临时文件下载链接。
 
-下载产物保存在 `storage/`，历史记录保存在 `storage/history.json`。历史页会扫描 `storage/` 中已有视频，自动补齐时长和本地缩略图，并提供下载入口。
+下载产物保存在 `storage/`，任务记录保存在 `storage/history.json`。任务列表会扫描 `storage/` 中已有视频，自动补齐时长和本地缩略图，并提供下载入口。
+
+首页是统一任务中心：粘贴单个链接或多行链接创建解析任务；解析成功后可选择清晰度并加入下载队列；完成后在同一条任务记录里下载文件。
 
 ## 快速开始
 
@@ -26,6 +28,7 @@ npm run dev:chrome
 
 ```bash
 DOWNLOAD_DIR=storage
+MAX_CONCURRENT_PARSE=2
 MAX_CONCURRENT_DOWNLOADS=1
 YTDLP_COOKIES_ENABLED=false
 YTDLP_COOKIES_PATH=/absolute/path/to/cookies.txt

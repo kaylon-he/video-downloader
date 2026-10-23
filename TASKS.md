@@ -24,6 +24,7 @@
 |---|------|------|--------------|--------|------|
 | 1.1 | 封装 yt-dlp 调用 | spawn + 参数拼装 + 错误处理 | `lib/ytdlp.ts` | P0 | ✅ |
 | 1.2 | 解析接口 | `POST /api/parse`：URL → 标题/封面/时长/清晰度列表（`yt-dlp -J`） | `app/api/parse/route.ts` | P0 | ✅ |
+| 1.3 | 解析任务接口 | `POST /api/tasks/parse`：单条/多行 URL → 持久化解析任务 | `app/api/tasks/parse/route.ts`、`lib/parse-tasks.ts` | P1 | ✅ |
 | 1.3 | 安全校验 | 协议白名单、防 SSRF、防命令注入 | `lib/validate.ts` | P0 | ✅ |
 | 1.4 | generic 兜底 | yt-dlp 不认识的站，尝试解析页面里的 m3u8/mp4 | `lib/ytdlp.ts` | P1 | ⬜ |
 | 1.5 | 统一返回结构 | 成功/失败/不支持 + 错误码 | `lib/types.ts` | P1 | ✅ |
@@ -33,6 +34,7 @@
 | # | 任务 | 说明 | 涉及文件/模块 | 优先级 | 状态 |
 |---|------|------|--------------|--------|------|
 | 2.1 | 下载接口 | `POST /api/download`：URL + 格式 → 建任务 → 返回 `taskId` | `app/api/download/route.ts` | P0 | ✅ |
+| 2.1a | 任务下载接口 | `POST /api/tasks/[id]/download`：从已解析任务进入下载队列 | `app/api/tasks/[id]/download/route.ts` | P1 | ✅ |
 | 2.2 | 任务管理 | 内存版先行，预留 Redis 接口 | `lib/tasks.ts` | P0 | ✅ |
 | 2.3 | 执行下载 | spawn yt-dlp（m3u8 自动下分片 + AES 解密） | `lib/ytdlp.ts` | P0 | ✅ |
 | 2.4 | 合并转码 | ffmpeg 合并/转 mp4 | `lib/ytdlp.ts` | P0 | ✅ |
@@ -50,7 +52,7 @@
 | 3.2 | 结果卡片 | 封面、标题、时长、清晰度下拉 | `components/ResultCard.tsx` | P0 | ✅ |
 | 3.3 | 下载 + 进度条 | 触发任务 → 轮询进度 | `components/DownloadButton.tsx` | P0 | ✅ |
 | 3.4 | 完成态 | 显示「保存文件」链接 | `components/DownloadButton.tsx` | P0 | ✅ |
-| 3.5 | 任务列表/历史 | 多任务与下载历史 | `app/page.tsx`、`lib/history.ts` | P2 | ✅ |
+| 3.5 | 统一任务中心 | 解析中、已解析、下载中、完成与历史记录统一展示 | `app/page.tsx`、`lib/history.ts` | P2 | ✅ |
 | 3.6 | 交互态 | 错误/加载/空态提示 | 各组件 | P1 | ✅ |
 | 3.7 | 响应式 | 移动端适配 | `globals.css` | P2 | ✅ |
 

@@ -40,6 +40,7 @@ npm run start
 
 ```bash
 DOWNLOAD_DIR=/data/video-downloader/storage
+MAX_CONCURRENT_PARSE=2
 MAX_CONCURRENT_DOWNLOADS=1
 YTDLP_COOKIES_FROM_BROWSER=
 YTDLP_COOKIES_ENABLED=false
@@ -51,6 +52,7 @@ YTDLP_COOKIES_PATH=
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `DOWNLOAD_DIR` | `storage` | 下载产物目录 |
+| `MAX_CONCURRENT_PARSE` | `2` | 同时解析任务数，YouTube / X 等平台不建议调太大 |
 | `MAX_CONCURRENT_DOWNLOADS` | `1` | 同时下载任务数 |
 | `YTDLP_COOKIES_FROM_BROWSER` | 空 | 读取本机浏览器 cookies，如 `chrome` |
 | `YTDLP_COOKIES_ENABLED` | `false` | 是否启用 cookies 文件模式 |

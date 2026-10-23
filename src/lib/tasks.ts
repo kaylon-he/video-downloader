@@ -35,6 +35,7 @@ function getStore(): TaskStore {
 }
 
 export async function createDownloadTask(input: {
+  historyId?: string;
   url: string;
   formatId?: string;
   title?: string;
@@ -56,11 +57,13 @@ export async function createDownloadTask(input: {
 
   store.tasks.set(task.id, task);
   await upsertHistory({
+    historyId: input.historyId,
     taskId: task.id,
     url: task.url,
     title: input.title,
     thumbnail: input.thumbnail,
     duration: input.duration,
+    formatId: input.formatId,
     status: task.status,
     progress: task.progress,
   });
@@ -153,5 +156,7 @@ function updateTask(taskId: string, patch: Partial<DownloadTask>): void {
     fileId: next.fileId,
     error: next.error,
     fileSize: next.fileSize,
+  }).catch((error) => {
+    console.error("更新任务历史失败", error);
   });
 }

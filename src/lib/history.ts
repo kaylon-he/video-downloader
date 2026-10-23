@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ensureThumbnail, probeDuration } from "./media";
 import { getStorageDir } from "./storage";
-import type { DownloadStatus, HistoryItem } from "./types";
+import type { DownloadStatus, HistoryItem, RecordStatus, VideoFormat } from "./types";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".webm", ".mov", ".m4v"]);
 
@@ -15,21 +15,27 @@ export async function listHistory(): Promise<HistoryItem[]> {
 }
 
 export async function upsertHistory(input: {
+  historyId?: string;
   taskId: string;
   url: string;
   title?: string;
   thumbnail?: string;
   duration?: number;
+  formatId?: string;
   status: DownloadStatus;
   progress: number;
 }): Promise<void> {
   const items = await readHistory();
   const now = Date.now();
-  const current = items.find((item) => item.taskId === input.taskId);
+  const current = input.historyId
+    ? items.find((item) => item.id === input.historyId)
+    : items.find((item) => item.taskId === input.taskId);
 
   if (current) {
+    const rest = { ...input };
+    delete rest.historyId;
     Object.assign(current, {
-      ...compact(input),
+      ...compact(rest),
       updatedAt: now,
       source: "download" as const,
     });
@@ -41,6 +47,7 @@ export async function upsertHistory(input: {
       title: input.title || "未命名视频",
       thumbnail: input.thumbnail,
       duration: input.duration,
+      formatId: input.formatId,
       status: input.status,
       progress: input.progress,
       source: "download",
@@ -49,6 +56,49 @@ export async function upsertHistory(input: {
     });
   }
 
+  await writeHistory(items);
+}
+
+export async function createHistoryItem(input: {
+  url?: string;
+  title?: string;
+  status: RecordStatus;
+  progress?: number;
+  error?: string;
+  formats?: VideoFormat[];
+}): Promise<HistoryItem> {
+  const items = await readHistory();
+  const now = Date.now();
+  const item: HistoryItem = {
+    id: randomUUID(),
+    url: input.url,
+    title: input.title || input.url || "未命名任务",
+    status: input.status,
+    progress: input.progress ?? 0,
+    error: input.error,
+    formats: input.formats,
+    source: "download",
+    createdAt: now,
+    updatedAt: now,
+  };
+  items.push(item);
+  await writeHistory(items);
+  return item;
+}
+
+export async function getHistoryItem(id: string): Promise<HistoryItem | undefined> {
+  const items = await listHistory();
+  return items.find((item) => item.id === id);
+}
+
+export async function updateHistoryById(id: string, patch: HistoryPatch): Promise<void> {
+  const items = await readHistory();
+  const current = items.find((item) => item.id === id);
+  if (!current) {
+    return;
+  }
+
+  Object.assign(current, compact(patch), { updatedAt: Date.now() });
   await writeHistory(items);
 }
 
@@ -217,7 +267,7 @@ async function readHistory(): Promise<HistoryItem[]> {
 async function writeHistory(items: HistoryItem[]): Promise<void> {
   await fs.mkdir(getStorageDir(), { recursive: true });
   const historyFile = getHistoryFile();
-  const tmpFile = `${historyFile}.tmp`;
+  const tmpFile = `${historyFile}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await fs.writeFile(tmpFile, `${JSON.stringify(items, null, 2)}\n`, "utf8");
   await fs.rename(tmpFile, historyFile);
 }

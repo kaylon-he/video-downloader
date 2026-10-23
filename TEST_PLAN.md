@@ -45,7 +45,9 @@
 | # | 测试点 | 覆盖任务 | 关键断言 | 文件 | 状态 |
 |---|--------|---------|---------|------|------|
 | I1 | `POST /api/parse` | 1.2 | 合法 URL 返回 200 + 视频信息；非法 URL 返回 400 | `__tests__/integration/parse.test.ts` | ⬜ |
+| I1a | `POST /api/tasks/parse` | 1.3 | 单条/多行 URL 创建解析任务；非法 URL 生成解析失败记录 | `__tests__/integration/tasks-parse.test.ts` | ⬜ |
 | I2 | `POST /api/download` | 2.1 | 返回 `taskId`，任务进入 pending | `__tests__/integration/download.test.ts` | ⬜ |
+| I2a | `POST /api/tasks/[id]/download` | 2.1a | 已解析任务进入下载队列，状态写回同一条记录 | `__tests__/integration/tasks-download.test.ts` | ⬜ |
 | I3 | `GET /api/progress` | 2.6 | 轮询返回递增进度，最终 done | `__tests__/integration/progress.test.ts` | ⬜ |
 | I4 | `GET /api/file/:id` | 2.7 | 完成后能下到文件，未完成/过期返回 404 | `__tests__/integration/file.test.ts` | ⬜ |
 | I5 | 速率限制 | 4.1 | 超频请求返回 429 | `__tests__/integration/ratelimit.test.ts` | ⬜ |
@@ -56,11 +58,11 @@
 | # | 场景 | 覆盖任务 | 关键步骤与断言 | 文件 | 状态 |
 |---|------|---------|---------------|------|------|
 | E1 | 首页渲染 | 3.1 | 输入框、解析按钮可见 | `e2e/home.spec.ts` | ⬜ |
-| E2 | 解析成功 | 3.1/3.2 | 输入 URL → 点解析 → 出现封面/标题/清晰度下拉 | `e2e/parse.spec.ts` | ⬜ |
-| E3 | 解析失败提示 | 3.6 | 非法 URL → 显示错误提示 | `e2e/parse-error.spec.ts` | ⬜ |
-| E4 | 下载流程 + 进度条 | 3.3 | 选清晰度 → 点下载 → 进度条推进 | `e2e/download.spec.ts` | ⬜ |
-| E5 | 下载完成 | 3.4 | 进度 100% → 出现保存文件链接且可点击 | `e2e/download-done.spec.ts` | ⬜ |
-| E6 | 多任务/历史 | 3.5 | 连续发起多任务，列表正确展示状态 | `e2e/tasks.spec.ts` | ⬜ |
+| E2 | 解析任务成功 | 3.1/3.2 | 输入 URL → 创建解析任务 → 任务列表出现已解析记录和清晰度下拉 | `e2e/parse.spec.ts` | ⬜ |
+| E3 | 解析失败提示 | 3.6 | 非法 URL → 任务列表显示解析失败和错误原因 | `e2e/parse-error.spec.ts` | ⬜ |
+| E4 | 下载流程 + 进度条 | 3.3 | 已解析任务选清晰度 → 加入下载队列 → 进度条推进 | `e2e/download.spec.ts` | ⬜ |
+| E5 | 下载完成 | 3.4 | 进度 100% → 同一条任务出现下载文件链接且可点击 | `e2e/download-done.spec.ts` | ⬜ |
+| E6 | 多任务/历史 | 3.5 | 多行 URL 创建任务，解析/下载/完成记录统一展示 | `e2e/tasks.spec.ts` | ⬜ |
 | E7 | 移动端响应式 | 3.7 | 移动视口下布局正常、可操作 | `e2e/responsive.spec.ts` | ⬜ |
 
 ## 六、脚本测试
