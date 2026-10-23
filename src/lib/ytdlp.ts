@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { parseAlibabaWithBrowser, isAlibabaUrl } from "./alibaba-browser";
 import { parseDouyinWithBrowser, isDouyinUrl } from "./douyin-browser";
 import type { BrowserMedia, VideoFormat, VideoInfo } from "./types";
 
@@ -36,6 +37,10 @@ export type DownloadProgress = {
 };
 
 export async function parseVideoInfo(url: string): Promise<VideoInfo> {
+  if (isAlibabaUrl(url)) {
+    return parseAlibabaWithBrowser(url);
+  }
+
   let result: RunResult;
   try {
     result = await runYtdlp(withCookies(["-J", "--no-playlist", "--no-warnings", url]));
@@ -147,12 +152,18 @@ async function downloadCapturedMedia(options: {
   onProgress?: (progress: DownloadProgress) => void;
 }): Promise<string> {
   const outputPath = path.join(options.outputDir, `${options.fileBaseName}.mp4`);
-  const freshInfo = await parseDouyinWithBrowser(options.browserMedia.sourceUrl);
+  const freshInfo = await refreshCapturedMedia(options.browserMedia);
   const freshMedia = freshInfo.browserMedia || options.browserMedia;
-  const args = ["-y", "-hide_banner", "-loglevel", "error", ...capturedMediaInputArgs(freshMedia.videoUrl)];
+  const args = [
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    ...capturedMediaInputArgs(freshMedia, freshMedia.videoUrl),
+  ];
 
   if (freshMedia.audioUrl) {
-    args.push(...capturedMediaInputArgs(freshMedia.audioUrl), "-map", "0:v:0", "-map", "1:a:0");
+    args.push(...capturedMediaInputArgs(freshMedia, freshMedia.audioUrl), "-map", "0:v:0", "-map", "1:a:0");
   }
 
   args.push("-c", "copy", "-movflags", "+faststart", outputPath);
@@ -184,15 +195,51 @@ async function downloadCapturedMedia(options: {
   });
 }
 
-function capturedMediaInputArgs(url: string): string[] {
+async function refreshCapturedMedia(media: BrowserMedia): Promise<VideoInfo> {
+  if (isDouyinUrl(media.sourceUrl)) {
+    return parseDouyinWithBrowser(media.sourceUrl);
+  }
+  if (isAlibabaUrl(media.sourceUrl)) {
+    return parseAlibabaWithBrowser(media.sourceUrl).catch(() => ({
+      url: media.sourceUrl,
+      title: "1688 商品视频",
+      formats: [],
+      browserMedia: media,
+    }));
+  }
+  return {
+    url: media.sourceUrl,
+    title: "浏览器捕获视频",
+    formats: [],
+    browserMedia: media,
+  };
+}
+
+function capturedMediaInputArgs(media: BrowserMedia, url: string): string[] {
+  const referer = media.referer || media.sourceUrl;
+  const origin = media.origin || safeOrigin(referer);
+  const headers = [`Referer: ${referer}`];
+  if (origin) {
+    headers.push(`Origin: ${origin}`);
+  }
+
   return [
     "-user_agent",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+    media.userAgent ||
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
     "-headers",
-    "Referer: https://www.douyin.com/\r\nOrigin: https://www.douyin.com\r\n",
+    `${headers.join("\r\n")}\r\n`,
     "-i",
     url,
   ];
+}
+
+function safeOrigin(input: string): string | undefined {
+  try {
+    return new URL(input).origin;
+  } catch {
+    return undefined;
+  }
 }
 
 export function buildDownloadArgs(input: {

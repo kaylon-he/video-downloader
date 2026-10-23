@@ -44,6 +44,9 @@ export type BrowserMedia = {
   sourceUrl: string;
   videoUrl: string;
   audioUrl?: string;
+  referer?: string;
+  origin?: string;
+  userAgent?: string;
 };
 
 export type DownloadStatus = "pending" | "running" | "done" | "failed";

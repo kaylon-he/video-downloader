@@ -4,6 +4,8 @@ import type { BrowserMedia, VideoFormat, VideoInfo } from "./types";
 const DOUYIN_HOST_RE = /(^|\.)douyin\.com$/i;
 const MEDIA_HOST_RE = /(^|\.)douyinvod\.com$/i;
 const CAPTURE_TIMEOUT_MS = Number(process.env.DOUYIN_BROWSER_CAPTURE_TIMEOUT_MS || "25000");
+const USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 
 type MediaCandidate = {
   url: string;
@@ -28,8 +30,7 @@ export async function parseDouyinWithBrowser(sourceUrl: string): Promise<VideoIn
     context = await browser.newContext({
       locale: "zh-CN",
       viewport: { width: 1280, height: 800 },
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+      userAgent: USER_AGENT,
     });
     const page = await context.newPage();
     const candidates = new Map<string, MediaCandidate>();
@@ -72,6 +73,9 @@ export async function parseDouyinWithBrowser(sourceUrl: string): Promise<VideoIn
       sourceUrl,
       videoUrl: video.url,
       audioUrl: audio?.url,
+      referer: "https://www.douyin.com/",
+      origin: "https://www.douyin.com",
+      userAgent: USER_AGENT,
     };
     const formats: VideoFormat[] = [
       {
