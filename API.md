@@ -257,6 +257,28 @@ GET /api/file/1e7094be-c87a-428e-be39-36fa8b448591
 - `BAD_REQUEST`：文件 ID 格式不合法。
 - `FILE_NOT_FOUND`：文件不存在、任务未完成或文件已被清理。
 
+## GET /api/stream/[id]
+
+视频播放流接口。与 `/api/file/[id]` 不同，这个接口返回可在线播放的视频流，并支持 `Range` 请求，供浏览器播放器拖动进度。
+
+请求：
+
+```text
+GET /api/stream/1e7094be-c87a-428e-be39-36fa8b448591
+Range: bytes=0-1023
+```
+
+成功响应：
+
+- `200` 或 `206`
+- `Content-Type: video/mp4`、`video/webm` 等
+- `Accept-Ranges: bytes`
+
+常见错误：
+
+- `BAD_REQUEST`：文件 ID 格式不合法。
+- `FILE_NOT_FOUND`：文件不存在、任务未完成或文件已被清理。
+
 ## GET /api/history
 
 兼容旧接口。读取任务记录。接口会返回 `storage/history.json` 中的任务历史，并扫描 `storage/` 下现有视频文件，将可识别的 UUID 文件恢复为历史记录。

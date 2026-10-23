@@ -43,6 +43,7 @@
 | 2.6 | 进度接口 | `GET /api/progress?taskId=` 供前端轮询 | `app/api/progress/route.ts` | P0 | ✅ |
 | 2.7 | 产物下载 | 存 `storage/` → 临时链接 `GET /api/file/:id` | `app/api/file/[id]/route.ts` | P0 | ✅ |
 | 2.8 | 并发与队列 | 限制同时下载数，排队 | `lib/tasks.ts` | P1 | ✅ |
+| 2.8a | 在线播放接口 | `GET /api/stream/[id]` 支持 Range 视频流 | `app/api/stream/[id]/route.ts` | P1 | ✅ |
 | 2.9 | 超时/取消/重试 | 任务异常处理 | `lib/tasks.ts` | P1 | ⬜ |
 
 ## 阶段 3：前端界面
@@ -54,6 +55,7 @@
 | 3.3 | 下载 + 进度条 | 触发任务 → 轮询进度 | `components/DownloadButton.tsx` | P0 | ✅ |
 | 3.4 | 完成态 | 显示「保存文件」链接 | `components/DownloadButton.tsx` | P0 | ✅ |
 | 3.5 | 统一任务中心 | 解析中、已解析、下载中、完成与历史记录统一展示 | `app/page.tsx`、`lib/history.ts` | P2 | ✅ |
+| 3.5a | 在线播放 | 完成任务显示播放按钮和播放器弹层 | `app/page.tsx` | P2 | ✅ |
 | 3.6 | 交互态 | 错误/加载/空态提示 | 各组件 | P1 | ✅ |
 | 3.7 | 响应式 | 移动端适配 | `globals.css` | P2 | ✅ |
 

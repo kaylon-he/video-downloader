@@ -10,6 +10,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [playingItem, setPlayingItem] = useState<HistoryItem | null>(null);
 
   const activeCount = useMemo(
     () => items.filter((item) => ["parsing", "pending", "running"].includes(item.status)).length,
@@ -192,6 +193,7 @@ export default function Home() {
                   }
                   onRetryParse={() => void handleRetryParse(item)}
                   onDelete={() => void handleDelete(item)}
+                  onPlay={() => setPlayingItem(item)}
                 />
               ))}
             </div>
@@ -201,6 +203,9 @@ export default function Home() {
             </div>
           )}
         </section>
+        {playingItem?.fileId ? (
+          <PlayerDialog item={playingItem} onClose={() => setPlayingItem(null)} />
+        ) : null}
       </div>
     </main>
   );
@@ -213,6 +218,7 @@ function TaskCard({
   onFormatChange,
   onRetryParse,
   onDelete,
+  onPlay,
 }: {
   item: HistoryItem;
   selectedFormat: string;
@@ -220,6 +226,7 @@ function TaskCard({
   onFormatChange: (formatId: string) => void;
   onRetryParse: () => void;
   onDelete: () => void;
+  onPlay: () => void;
 }) {
   const canChooseFormat = item.status === "parsed" && item.formats && item.formats.length > 0;
   const canDownload = item.status === "parsed" || item.status === "failed";
@@ -275,12 +282,21 @@ function TaskCard({
         ) : null}
 
         {item.status === "done" && item.fileId ? (
-          <a
-            className="flex min-h-10 items-center justify-center rounded-md bg-[var(--color-brand)] px-4 text-sm font-medium text-white transition hover:bg-[var(--color-brand-strong)]"
-            href={`/api/file/${item.fileId}`}
-          >
-            下载文件
-          </a>
+          <>
+            <button
+              className="min-h-10 rounded-md bg-[var(--color-ink)] px-4 text-sm font-medium text-white transition hover:bg-black"
+              onClick={onPlay}
+              type="button"
+            >
+              播放
+            </button>
+            <a
+              className="flex min-h-10 items-center justify-center rounded-md bg-[var(--color-brand)] px-4 text-sm font-medium text-white transition hover:bg-[var(--color-brand-strong)]"
+              href={`/api/file/${item.fileId}`}
+            >
+              下载文件
+            </a>
+          </>
         ) : canDownload ? (
           <button
             className="min-h-10 rounded-md bg-[var(--color-ink)] px-4 text-sm font-medium text-white transition hover:bg-black"
@@ -310,6 +326,49 @@ function TaskCard({
         </button>
       </div>
     </article>
+  );
+}
+
+function PlayerDialog({ item, onClose }: { item: HistoryItem; onClose: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  if (!item.fileId) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6">
+      <div className="w-full max-w-5xl overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] shadow-2xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+          <h2 className="min-w-0 truncate text-base font-semibold">{item.title}</h2>
+          <button
+            className="min-h-10 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-surface)]"
+            onClick={onClose}
+            type="button"
+          >
+            关闭
+          </button>
+        </div>
+        <div className="bg-black">
+          <video
+            autoPlay
+            className="max-h-[75vh] w-full"
+            controls
+            playsInline
+            poster={item.thumbnail}
+            src={`/api/stream/${item.fileId}`}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 

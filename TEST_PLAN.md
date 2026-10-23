@@ -51,6 +51,7 @@
 | I2b | `DELETE /api/tasks/[id]` | 2.1b | 删除非运行任务；完成任务同步删除文件和缩略图；运行中任务返回 400 | `__tests__/integration/tasks-delete.test.ts` | ⬜ |
 | I3 | `GET /api/progress` | 2.6 | 轮询返回递增进度，最终 done | `__tests__/integration/progress.test.ts` | ⬜ |
 | I4 | `GET /api/file/:id` | 2.7 | 完成后能下到文件，未完成/过期返回 404 | `__tests__/integration/file.test.ts` | ⬜ |
+| I4a | `GET /api/stream/:id` | 2.8a | 返回视频流；Range 请求返回 206 和 `Content-Range` | `__tests__/integration/stream.test.ts` | ⬜ |
 | I5 | 速率限制 | 4.1 | 超频请求返回 429 | `__tests__/integration/ratelimit.test.ts` | ⬜ |
 | I6 | 下载全链路（mock yt-dlp） | 2.1~2.7 | parse→download→progress→file 串联通过 | `__tests__/integration/flow.test.ts` | ⬜ |
 
@@ -65,7 +66,8 @@
 | E5 | 下载完成 | 3.4 | 进度 100% → 同一条任务出现下载文件链接且可点击 | `e2e/download-done.spec.ts` | ⬜ |
 | E6 | 多任务/历史 | 3.5 | 多行 URL 创建任务，解析/下载/完成记录统一展示 | `e2e/tasks.spec.ts` | ⬜ |
 | E7 | 删除任务 | 3.5 | 点击删除 → 确认 → 任务从列表消失；取消确认不删除 | `e2e/tasks-delete.spec.ts` | ⬜ |
-| E7 | 移动端响应式 | 3.7 | 移动视口下布局正常、可操作 | `e2e/responsive.spec.ts` | ⬜ |
+| E8 | 在线播放 | 3.5a | 点击播放 → 弹出播放器；关闭后回到任务列表 | `e2e/player.spec.ts` | ⬜ |
+| E9 | 移动端响应式 | 3.7 | 移动视口下布局正常、可操作 | `e2e/responsive.spec.ts` | ⬜ |
 
 ## 六、脚本测试
 
