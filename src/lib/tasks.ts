@@ -100,13 +100,16 @@ async function drainQueue(): Promise<void> {
 }
 
 async function runTask(task: DownloadTask): Promise<void> {
+  const fileId = randomUUID();
+  store.fileToTask.set(fileId, task.id);
+
   updateTask(task.id, {
     status: "running",
+    fileId,
     progress: 0,
     updatedAt: Date.now(),
   });
 
-  const fileId = randomUUID();
   try {
     const filename = await downloadVideo({
       url: task.url,

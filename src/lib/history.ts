@@ -6,6 +6,7 @@ import { getStorageDir } from "./storage";
 import type { DownloadStatus, HistoryItem, RecordStatus, VideoFormat } from "./types";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".webm", ".mov", ".m4v"]);
+const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 type HistoryPatch = Partial<Omit<HistoryItem, "id" | "createdAt">>;
 
@@ -140,7 +141,7 @@ export async function resolveHistoryFile(fileId: string): Promise<string | null>
   const files = await safeReaddir(storageDir);
   const match = files.find((name) => {
     const parsed = path.parse(name);
-    return parsed.name === fileId && VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase());
+    return getVideoFileId(name) === fileId && VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase());
   });
 
   return match ? path.join(storageDir, match) : null;
@@ -156,7 +157,8 @@ async function ensureRecoveredFiles(): Promise<HistoryItem[]> {
 
   for (const name of files) {
     const parsed = path.parse(name);
-    if (!VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase()) || knownFileIds.has(parsed.name)) {
+    const fileId = getVideoFileId(name);
+    if (!VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase()) || !fileId || knownFileIds.has(fileId)) {
       continue;
     }
 
@@ -175,10 +177,10 @@ async function ensureRecoveredFiles(): Promise<HistoryItem[]> {
       duration,
       status: "done",
       progress: 100,
-      fileId: parsed.name,
+      fileId,
       filename,
       fileSize: stat.size,
-      thumbnail: await ensureThumbnail(parsed.name, filename),
+      thumbnail: await ensureThumbnail(fileId, filename),
       source: "recovered",
       createdAt: stat.birthtimeMs || stat.mtimeMs,
       updatedAt: stat.mtimeMs,
@@ -239,7 +241,7 @@ async function findLocalVideo(fileId: string): Promise<string | undefined> {
   const files = await safeReaddir(getStorageDir());
   const match = files.find((name) => {
     const parsed = path.parse(name);
-    return parsed.name === fileId && VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase());
+    return getVideoFileId(name) === fileId && VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase());
   });
   return match ? path.join(getStorageDir(), match) : undefined;
 }
@@ -335,4 +337,10 @@ async function exists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function getVideoFileId(filename: string): string | null {
+  const parsed = path.parse(filename);
+  const match = parsed.name.match(UUID_PREFIX);
+  return match?.[0] || null;
 }
