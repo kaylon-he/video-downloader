@@ -13,7 +13,7 @@ export default function Home() {
   const [task, setTask] = useState<DownloadTask | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("downloader");
+  const [activeTab, setActiveTab] = useState<Tab | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -180,7 +180,12 @@ export default function Home() {
           </TabButton>
         </div>
 
-        {activeTab === "downloader" ? (
+        {activeTab === null ? (
+          <section
+            aria-busy="true"
+            className="min-h-[420px] rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)]"
+          />
+        ) : activeTab === "downloader" ? (
         <section className="grid flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-4 sm:p-6">
             <form className="flex flex-wrap gap-3" onSubmit={handleParse}>
@@ -441,8 +446,12 @@ function TaskRow({ label, value }: { label: string; value: string }) {
 
 function formatDuration(seconds: number): string {
   const safeSeconds = Math.max(0, Math.floor(seconds));
-  const minutes = Math.floor(safeSeconds / 60);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
   const rest = safeSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+  }
   return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
