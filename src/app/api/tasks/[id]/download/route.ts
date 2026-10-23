@@ -36,6 +36,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       title: item.title,
       thumbnail: item.thumbnail,
       duration: item.duration,
+      browserMedia: item.browserMedia,
     });
 
     return NextResponse.json(ok({ taskId: task.id, task }));

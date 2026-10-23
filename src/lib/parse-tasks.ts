@@ -41,6 +41,24 @@ export async function createParseTask(url: string): Promise<HistoryItem> {
   return item;
 }
 
+export async function retryParseTask(id: string, url: string): Promise<void> {
+  store.urls.set(id, url);
+  store.queue.push(id);
+  await updateHistoryById(id, {
+    url,
+    title: url,
+    thumbnail: undefined,
+    duration: undefined,
+    formats: undefined,
+    formatId: undefined,
+    browserMedia: undefined,
+    status: "parsing",
+    progress: 0,
+    error: undefined,
+  });
+  void drainQueue();
+}
+
 export async function createFailedParseTask(input: {
   url?: string;
   error: string;
@@ -81,6 +99,7 @@ async function runParseTask(id: string, url: string): Promise<void> {
       thumbnail: info.thumbnail,
       duration: info.duration,
       formats: info.formats,
+      browserMedia: info.browserMedia,
       formatId: info.formats[0]?.id,
       status: "parsed",
       progress: 100,

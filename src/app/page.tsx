@@ -89,13 +89,8 @@ export default function Home() {
   }
 
   async function handleRetryParse(item: HistoryItem) {
-    if (!item.url) return;
     setError("");
-    const response = await fetch("/api/tasks/parse", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: item.url }),
-    });
+    const response = await fetch(`/api/tasks/${item.id}`, { method: "POST" });
     const payload = (await response.json()) as ApiResponse<unknown>;
     if (!payload.ok) {
       setError(payload.error.detail || payload.error.message);
@@ -376,6 +371,10 @@ function PlayerDialog({ item, onClose }: { item: HistoryItem; onClose: () => voi
 
 function Thumbnail({ src }: { src?: string }) {
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
 
   if (!src || failed) {
     return (

@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ensureThumbnail, probeDuration } from "./media";
 import { getStorageDir } from "./storage";
-import type { DownloadStatus, HistoryItem, RecordStatus, VideoFormat } from "./types";
+import type { BrowserMedia, DownloadStatus, HistoryItem, RecordStatus, VideoFormat } from "./types";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".webm", ".mov", ".m4v"]);
 const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -22,6 +22,7 @@ export async function upsertHistory(input: {
   title?: string;
   thumbnail?: string;
   duration?: number;
+  browserMedia?: BrowserMedia;
   formatId?: string;
   status: DownloadStatus;
   progress: number;
@@ -48,6 +49,7 @@ export async function upsertHistory(input: {
       title: input.title || "未命名视频",
       thumbnail: input.thumbnail,
       duration: input.duration,
+      browserMedia: input.browserMedia,
       formatId: input.formatId,
       status: input.status,
       progress: input.progress,
@@ -67,6 +69,7 @@ export async function createHistoryItem(input: {
   progress?: number;
   error?: string;
   formats?: VideoFormat[];
+  browserMedia?: BrowserMedia;
 }): Promise<HistoryItem> {
   const items = await readHistory();
   const now = Date.now();
@@ -78,6 +81,7 @@ export async function createHistoryItem(input: {
     progress: input.progress ?? 0,
     error: input.error,
     formats: input.formats,
+    browserMedia: input.browserMedia,
     source: "download",
     createdAt: now,
     updatedAt: now,
@@ -112,7 +116,7 @@ export async function updateHistoryById(id: string, patch: HistoryPatch): Promis
     return;
   }
 
-  Object.assign(current, compact(patch), { updatedAt: Date.now() });
+  Object.assign(current, patch, { updatedAt: Date.now() });
   await writeHistory(items);
 }
 
@@ -123,7 +127,7 @@ export async function updateHistoryByTaskId(taskId: string, patch: HistoryPatch)
     return;
   }
 
-  Object.assign(current, compact(patch), { updatedAt: Date.now() });
+  Object.assign(current, patch, { updatedAt: Date.now() });
   await writeHistory(items);
 }
 
@@ -200,7 +204,8 @@ async function enrichExistingItems(items: HistoryItem[]): Promise<HistoryItem[]>
   const enriched: HistoryItem[] = [];
 
   for (const item of items) {
-    if (item.status !== "done" || !item.fileId) {
+    const canRecoverCompletedDownload = item.status === "done" || item.progress >= 100;
+    if (!canRecoverCompletedDownload || !item.fileId) {
       enriched.push(item);
       continue;
     }
@@ -213,21 +218,34 @@ async function enrichExistingItems(items: HistoryItem[]): Promise<HistoryItem[]>
 
     const stat = await fs.stat(filename);
     const duration = item.duration || (await probeDuration(filename));
-    const thumbnail = item.thumbnail || (await ensureThumbnail(item.fileId, filename));
+    if (!duration) {
+      enriched.push(item);
+      continue;
+    }
+    const localThumbnail = item.thumbnail?.startsWith("/api/thumbnail/")
+      ? item.thumbnail
+      : await ensureThumbnail(item.fileId, filename);
+    const thumbnail = localThumbnail || item.thumbnail;
     const next = {
       ...item,
+      status: "done" as const,
+      progress: 100,
       filename,
       fileSize: stat.size,
       duration,
       thumbnail,
+      error: undefined,
     };
 
     changed =
       changed ||
+      next.status !== item.status ||
+      next.progress !== item.progress ||
       next.filename !== item.filename ||
       next.fileSize !== item.fileSize ||
       next.duration !== item.duration ||
-      next.thumbnail !== item.thumbnail;
+      next.thumbnail !== item.thumbnail ||
+      next.error !== item.error;
     enriched.push(next);
   }
 

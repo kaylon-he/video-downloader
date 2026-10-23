@@ -37,6 +37,13 @@ export type VideoInfo = {
   thumbnail?: string;
   duration?: number;
   formats: VideoFormat[];
+  browserMedia?: BrowserMedia;
+};
+
+export type BrowserMedia = {
+  sourceUrl: string;
+  videoUrl: string;
+  audioUrl?: string;
 };
 
 export type DownloadStatus = "pending" | "running" | "done" | "failed";
@@ -50,6 +57,7 @@ export type RecordStatus =
 export type DownloadTask = {
   id: string;
   url: string;
+  browserMedia?: BrowserMedia;
   formatId?: string;
   status: DownloadStatus;
   progress: number;
@@ -67,6 +75,7 @@ export type HistoryItem = {
   id: string;
   taskId?: string;
   url?: string;
+  browserMedia?: BrowserMedia;
   title: string;
   thumbnail?: string;
   duration?: number;

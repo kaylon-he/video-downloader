@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { updateHistoryByTaskId, upsertHistory } from "./history";
 import { getStorageDir } from "./storage";
 import { downloadVideo } from "./ytdlp";
-import type { DownloadTask } from "./types";
+import type { BrowserMedia, DownloadTask } from "./types";
 
 const MAX_CONCURRENT_DOWNLOADS = Number(process.env.MAX_CONCURRENT_DOWNLOADS || "1");
 
@@ -41,6 +41,7 @@ export async function createDownloadTask(input: {
   title?: string;
   thumbnail?: string;
   duration?: number;
+  browserMedia?: BrowserMedia;
 }): Promise<DownloadTask> {
   await fs.mkdir(getStorageDir(), { recursive: true });
 
@@ -48,6 +49,7 @@ export async function createDownloadTask(input: {
   const task: DownloadTask = {
     id: randomUUID(),
     url: input.url,
+    browserMedia: input.browserMedia,
     formatId: input.formatId,
     status: "pending",
     progress: 0,
@@ -63,6 +65,7 @@ export async function createDownloadTask(input: {
     title: input.title,
     thumbnail: input.thumbnail,
     duration: input.duration,
+    browserMedia: input.browserMedia,
     formatId: input.formatId,
     status: task.status,
     progress: task.progress,
@@ -113,6 +116,7 @@ async function runTask(task: DownloadTask): Promise<void> {
   try {
     const filename = await downloadVideo({
       url: task.url,
+      browserMedia: task.browserMedia,
       formatId: task.formatId,
       outputDir: getStorageDir(),
       fileBaseName: fileId,

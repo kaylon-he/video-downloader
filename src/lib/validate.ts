@@ -2,7 +2,7 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import type { LookupAddress } from "node:dns";
 
-const SHELL_META_RE = /[;&|$`<>\\]/;
+const SHELL_META_RE = /[;|$`<>\\]/;
 const MAX_URL_LENGTH = 2048;
 
 export class ValidationError extends Error {
@@ -43,7 +43,7 @@ export async function validateVideoUrl(input: unknown): Promise<string> {
   }
 
   await rejectPrivateHost(parsed.hostname);
-  return parsed.toString();
+  return normalizeSupportedUrl(parsed).toString();
 }
 
 export function validateFormatId(input: unknown): string | undefined {
@@ -91,6 +91,18 @@ async function rejectPrivateHost(hostname: string): Promise<void> {
   if (records.length === 0 || records.some((record) => isPrivateIp(record.address))) {
     throw new ValidationError("不允许访问内网地址");
   }
+}
+
+function normalizeSupportedUrl(url: URL): URL {
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+  if (hostname === "douyin.com" || hostname.endsWith(".douyin.com")) {
+    const modalId = url.searchParams.get("modal_id");
+    if (modalId && /^\d{8,32}$/.test(modalId)) {
+      return new URL(`/video/${modalId}`, "https://www.douyin.com");
+    }
+  }
+
+  return url;
 }
 
 function isPrivateIp(ip: string): boolean {

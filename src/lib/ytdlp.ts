@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import type { VideoFormat, VideoInfo } from "./types";
+import { parseDouyinWithBrowser, isDouyinUrl } from "./douyin-browser";
+import type { BrowserMedia, VideoFormat, VideoInfo } from "./types";
 
 type RunResult = {
   stdout: string;
@@ -35,7 +36,15 @@ export type DownloadProgress = {
 };
 
 export async function parseVideoInfo(url: string): Promise<VideoInfo> {
-  const result = await runYtdlp(withCookies(["-J", "--no-playlist", "--no-warnings", url]));
+  let result: RunResult;
+  try {
+    result = await runYtdlp(withCookies(["-J", "--no-playlist", "--no-warnings", url]));
+  } catch (error) {
+    if (isDouyinUrl(url) && isDouyinBrowserFallbackError(error)) {
+      return parseDouyinWithBrowser(url);
+    }
+    throw error;
+  }
   let raw: RawYtdlpInfo;
   try {
     raw = JSON.parse(result.stdout) as RawYtdlpInfo;
@@ -54,11 +63,21 @@ export async function parseVideoInfo(url: string): Promise<VideoInfo> {
 
 export async function downloadVideo(options: {
   url: string;
+  browserMedia?: BrowserMedia;
   formatId?: string;
   outputDir: string;
   fileBaseName: string;
   onProgress?: (progress: DownloadProgress) => void;
 }): Promise<string> {
+  if (options.browserMedia) {
+    return downloadCapturedMedia({
+      browserMedia: options.browserMedia,
+      outputDir: options.outputDir,
+      fileBaseName: options.fileBaseName,
+      onProgress: options.onProgress,
+    });
+  }
+
   const outputTemplate = path.join(options.outputDir, `${options.fileBaseName}.%(ext)s`);
   const args = [
     "--no-playlist",
@@ -116,9 +135,64 @@ export async function downloadVideo(options: {
         resolve(finalPath || path.join(options.outputDir, `${options.fileBaseName}.mp4`));
         return;
       }
-      reject(new Error(stderr.trim() || `yt-dlp 退出码 ${code}`));
+      reject(new Error(normalizeYtdlpError(stderr.trim() || `yt-dlp 退出码 ${code}`)));
     });
   });
+}
+
+async function downloadCapturedMedia(options: {
+  browserMedia: BrowserMedia;
+  outputDir: string;
+  fileBaseName: string;
+  onProgress?: (progress: DownloadProgress) => void;
+}): Promise<string> {
+  const outputPath = path.join(options.outputDir, `${options.fileBaseName}.mp4`);
+  const freshInfo = await parseDouyinWithBrowser(options.browserMedia.sourceUrl);
+  const freshMedia = freshInfo.browserMedia || options.browserMedia;
+  const args = ["-y", "-hide_banner", "-loglevel", "error", ...capturedMediaInputArgs(freshMedia.videoUrl)];
+
+  if (freshMedia.audioUrl) {
+    args.push(...capturedMediaInputArgs(freshMedia.audioUrl), "-map", "0:v:0", "-map", "1:a:0");
+  }
+
+  args.push("-c", "copy", "-movflags", "+faststart", outputPath);
+  options.onProgress?.({ progress: 5 });
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        reject(new Error("未找到 ffmpeg，请先运行 bash scripts/setup.sh"));
+        return;
+      }
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        options.onProgress?.({ progress: 100 });
+        resolve(outputPath);
+        return;
+      }
+      reject(new Error(stderr.trim() || `ffmpeg 退出码 ${code}`));
+    });
+  });
+}
+
+function capturedMediaInputArgs(url: string): string[] {
+  return [
+    "-user_agent",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+    "-headers",
+    "Referer: https://www.douyin.com/\r\nOrigin: https://www.douyin.com\r\n",
+    "-i",
+    url,
+  ];
 }
 
 export function buildDownloadArgs(input: {
@@ -214,9 +288,36 @@ function runYtdlp(args: string[]): Promise<RunResult> {
         resolve({ stdout, stderr });
         return;
       }
-      reject(new Error(stderr.trim() || `yt-dlp 退出码 ${code}`));
+      reject(new Error(normalizeYtdlpError(stderr.trim() || `yt-dlp 退出码 ${code}`)));
     });
   });
+}
+
+function normalizeYtdlpError(message: string): string {
+  if (
+    message.includes("[Douyin]") &&
+    (message.includes("Fresh cookies") ||
+      message.includes("ArgusSecurityPlugin") ||
+      message.includes("encrypt_data_miss"))
+  ) {
+    return [
+      "抖音解析失败：当前 yt-dlp 无法通过抖音网页风控校验。",
+      "已读取浏览器登录 Cookie，但抖音详情接口仍要求前端生成的签名/校验参数。",
+      "请等待 yt-dlp 上游修复 Douyin 提取器，或改用浏览器模式解析。",
+    ].join(" ");
+  }
+
+  return message;
+}
+
+function isDouyinBrowserFallbackError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("[Douyin]") ||
+    message.includes("抖音解析失败") ||
+    message.includes("ArgusSecurityPlugin") ||
+    message.includes("encrypt_data_miss")
+  );
 }
 
 function withCookies(args: string[]): string[] {
