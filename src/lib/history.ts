@@ -91,6 +91,19 @@ export async function getHistoryItem(id: string): Promise<HistoryItem | undefine
   return items.find((item) => item.id === id);
 }
 
+export async function deleteHistoryItem(id: string): Promise<HistoryItem | undefined> {
+  const items = await readHistory();
+  const current = items.find((item) => item.id === id);
+  if (!current) {
+    return undefined;
+  }
+
+  const kept = items.filter((item) => item.id !== id);
+  await removeHistoryFiles(current);
+  await writeHistory(kept);
+  return current;
+}
+
 export async function updateHistoryById(id: string, patch: HistoryPatch): Promise<void> {
   const items = await readHistory();
   const current = items.find((item) => item.id === id);
@@ -229,6 +242,27 @@ async function findLocalVideo(fileId: string): Promise<string | undefined> {
     return parsed.name === fileId && VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase());
   });
   return match ? path.join(getStorageDir(), match) : undefined;
+}
+
+async function removeHistoryFiles(item: HistoryItem): Promise<void> {
+  const filenames = new Set<string>();
+  if (item.filename) {
+    filenames.add(item.filename);
+  }
+  if (item.fileId) {
+    const localVideo = await findLocalVideo(item.fileId);
+    if (localVideo) {
+      filenames.add(localVideo);
+    }
+    filenames.add(path.join(getStorageDir(), "thumbnails", `${item.fileId}.jpg`));
+  }
+
+  for (const filename of filenames) {
+    const safePath = resolveInsideStorage(filename);
+    if (safePath) {
+      await fs.rm(safePath, { force: true });
+    }
+  }
 }
 
 async function pruneInvalidRecoveredItems(items: HistoryItem[]): Promise<HistoryItem[]> {

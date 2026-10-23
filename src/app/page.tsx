@@ -103,6 +103,26 @@ export default function Home() {
     await loadTasks();
   }
 
+  async function handleDelete(item: HistoryItem) {
+    const confirmed = window.confirm(
+      item.fileId ? "删除后会同时移除本地视频文件，确认删除？" : "确认删除这条任务？",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    const response = await fetch(`/api/tasks/${item.id}`, {
+      method: "DELETE",
+    });
+    const payload = (await response.json()) as ApiResponse<unknown>;
+    if (!payload.ok) {
+      setError(payload.error.detail || payload.error.message);
+      return;
+    }
+    await loadTasks();
+  }
+
   return (
     <main className="min-h-screen bg-[var(--color-bg)] px-4 py-4 text-[var(--color-fg)] sm:px-6 lg:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-6xl flex-col gap-4">
@@ -171,6 +191,7 @@ export default function Home() {
                     setFormatById((current) => ({ ...current, [item.id]: formatId }))
                   }
                   onRetryParse={() => void handleRetryParse(item)}
+                  onDelete={() => void handleDelete(item)}
                 />
               ))}
             </div>
@@ -191,12 +212,14 @@ function TaskCard({
   onDownload,
   onFormatChange,
   onRetryParse,
+  onDelete,
 }: {
   item: HistoryItem;
   selectedFormat: string;
   onDownload: () => void;
   onFormatChange: (formatId: string) => void;
   onRetryParse: () => void;
+  onDelete: () => void;
 }) {
   const canChooseFormat = item.status === "parsed" && item.formats && item.formats.length > 0;
   const canDownload = item.status === "parsed" || item.status === "failed";
@@ -277,6 +300,14 @@ function TaskCard({
         ) : (
           <span className="text-right text-sm text-[var(--color-muted)]">{Math.round(item.progress)}%</span>
         )}
+        <button
+          className="min-h-10 rounded-md border border-[var(--color-danger-border)] px-4 text-sm font-medium text-[var(--color-danger)] transition hover:bg-[var(--color-danger-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isActive}
+          onClick={onDelete}
+          type="button"
+        >
+          删除
+        </button>
       </div>
     </article>
   );

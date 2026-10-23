@@ -178,6 +178,27 @@
 - `BAD_REQUEST`：当前任务状态不能下载，或格式参数不合法。
 - `INTERNAL_ERROR`：创建下载任务失败。
 
+## DELETE /api/tasks/[id]
+
+删除任务记录。若任务已有本地视频文件和本地缩略图，会一并删除。正在解析、排队或下载中的任务暂不允许删除。
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": "58a2..."
+  }
+}
+```
+
+常见错误：
+
+- `TASK_NOT_FOUND`：任务不存在。
+- `BAD_REQUEST`：任务正在运行，暂不能删除。
+- `INTERNAL_ERROR`：删除任务失败。
+
 ## GET /api/progress?taskId=...
 
 查询下载任务状态。

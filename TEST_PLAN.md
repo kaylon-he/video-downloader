@@ -48,6 +48,7 @@
 | I1a | `POST /api/tasks/parse` | 1.3 | 单条/多行 URL 创建解析任务；非法 URL 生成解析失败记录 | `__tests__/integration/tasks-parse.test.ts` | ⬜ |
 | I2 | `POST /api/download` | 2.1 | 返回 `taskId`，任务进入 pending | `__tests__/integration/download.test.ts` | ⬜ |
 | I2a | `POST /api/tasks/[id]/download` | 2.1a | 已解析任务进入下载队列，状态写回同一条记录 | `__tests__/integration/tasks-download.test.ts` | ⬜ |
+| I2b | `DELETE /api/tasks/[id]` | 2.1b | 删除非运行任务；完成任务同步删除文件和缩略图；运行中任务返回 400 | `__tests__/integration/tasks-delete.test.ts` | ⬜ |
 | I3 | `GET /api/progress` | 2.6 | 轮询返回递增进度，最终 done | `__tests__/integration/progress.test.ts` | ⬜ |
 | I4 | `GET /api/file/:id` | 2.7 | 完成后能下到文件，未完成/过期返回 404 | `__tests__/integration/file.test.ts` | ⬜ |
 | I5 | 速率限制 | 4.1 | 超频请求返回 429 | `__tests__/integration/ratelimit.test.ts` | ⬜ |
@@ -63,6 +64,7 @@
 | E4 | 下载流程 + 进度条 | 3.3 | 已解析任务选清晰度 → 加入下载队列 → 进度条推进 | `e2e/download.spec.ts` | ⬜ |
 | E5 | 下载完成 | 3.4 | 进度 100% → 同一条任务出现下载文件链接且可点击 | `e2e/download-done.spec.ts` | ⬜ |
 | E6 | 多任务/历史 | 3.5 | 多行 URL 创建任务，解析/下载/完成记录统一展示 | `e2e/tasks.spec.ts` | ⬜ |
+| E7 | 删除任务 | 3.5 | 点击删除 → 确认 → 任务从列表消失；取消确认不删除 | `e2e/tasks-delete.spec.ts` | ⬜ |
 | E7 | 移动端响应式 | 3.7 | 移动视口下布局正常、可操作 | `e2e/responsive.spec.ts` | ⬜ |
 
 ## 六、脚本测试

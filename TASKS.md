@@ -35,6 +35,7 @@
 |---|------|------|--------------|--------|------|
 | 2.1 | 下载接口 | `POST /api/download`：URL + 格式 → 建任务 → 返回 `taskId` | `app/api/download/route.ts` | P0 | ✅ |
 | 2.1a | 任务下载接口 | `POST /api/tasks/[id]/download`：从已解析任务进入下载队列 | `app/api/tasks/[id]/download/route.ts` | P1 | ✅ |
+| 2.1b | 任务删除接口 | `DELETE /api/tasks/[id]`：删除任务记录及本地文件 | `app/api/tasks/[id]/route.ts` | P1 | ✅ |
 | 2.2 | 任务管理 | 内存版先行，预留 Redis 接口 | `lib/tasks.ts` | P0 | ✅ |
 | 2.3 | 执行下载 | spawn yt-dlp（m3u8 自动下分片 + AES 解密） | `lib/ytdlp.ts` | P0 | ✅ |
 | 2.4 | 合并转码 | ffmpeg 合并/转 mp4 | `lib/ytdlp.ts` | P0 | ✅ |
