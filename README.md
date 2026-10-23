@@ -86,3 +86,12 @@ bash scripts/download.sh "https://www.youtube.com/watch?v=..."
 npm run lint
 npm run build
 ```
+
+## 文档
+
+- [API.md](API.md)：接口、响应结构和错误码。
+- [DEPLOY.md](DEPLOY.md)：VPS / 生产启动 / Nginx 部署说明。
+- [SECURITY.md](SECURITY.md)：cookies、SSRF、公网部署和合规边界。
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md)：YouTube、X、依赖、端口和下载失败排障。
+- [TASKS.md](TASKS.md)：开发任务清单。
+- [TEST_PLAN.md](TEST_PLAN.md)：测试计划。

@@ -1,0 +1,163 @@
+# API
+
+所有接口返回统一结构：
+
+```json
+{ "ok": true, "data": {} }
+```
+
+或：
+
+```json
+{ "ok": false, "error": { "code": "INVALID_URL", "message": "链接格式不正确" } }
+```
+
+## POST /api/parse
+
+解析视频链接，返回标题、封面、时长和可选格式。
+
+请求：
+
+```json
+{
+  "url": "https://www.youtube.com/watch?v=..."
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "url": "https://www.youtube.com/watch?v=...",
+    "title": "Me at the zoo",
+    "thumbnail": "https://...",
+    "duration": 19,
+    "formats": [
+      {
+        "id": "bv*+ba/b",
+        "label": "最佳画质（自动合并音视频）",
+        "hasAudio": true,
+        "hasVideo": true
+      }
+    ]
+  }
+}
+```
+
+常见错误：
+
+- `BAD_REQUEST`：请求体不是合法 JSON。
+- `INVALID_URL`：URL 格式、协议或 SSRF 校验失败。
+- `YTDLP_NOT_FOUND`：未安装 `yt-dlp`。
+- `YTDLP_FAILED`：平台解析失败、风控、视频不存在等。
+
+## POST /api/download
+
+创建下载任务，立即返回 `taskId`，下载在服务端异步执行。
+
+请求：
+
+```json
+{
+  "url": "https://www.youtube.com/watch?v=...",
+  "formatId": "bv*+ba/b"
+}
+```
+
+`formatId` 可省略，默认使用 `bv*+ba/b`。
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "taskId": "57a55ff8-f213-4789-81c9-311db6b87138",
+    "task": {
+      "id": "57a55ff8-f213-4789-81c9-311db6b87138",
+      "status": "pending",
+      "progress": 0
+    }
+  }
+}
+```
+
+常见错误：
+
+- `BAD_REQUEST`：请求体不是合法 JSON。
+- `INVALID_URL`：URL 或格式参数校验失败。
+- `INTERNAL_ERROR`：任务创建失败。
+
+## GET /api/progress?taskId=...
+
+查询下载任务状态。
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": "57a55ff8-f213-4789-81c9-311db6b87138",
+    "status": "running",
+    "progress": 42.7,
+    "speed": "1.23MiB/s",
+    "eta": "00:05"
+  }
+}
+```
+
+完成态会包含 `fileId`：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "status": "done",
+    "progress": 100,
+    "fileId": "1e7094be-c87a-428e-be39-36fa8b448591"
+  }
+}
+```
+
+常见错误：
+
+- `BAD_REQUEST`：缺少 `taskId`。
+- `TASK_NOT_FOUND`：任务不存在。当前任务存储为单进程内存，服务重启后历史任务会丢失。
+
+## GET /api/file/[id]
+
+下载完成后的文件下载接口。
+
+请求：
+
+```text
+GET /api/file/1e7094be-c87a-428e-be39-36fa8b448591
+```
+
+成功响应：
+
+- `200`
+- `Content-Type: application/octet-stream`
+- `Content-Disposition: attachment`
+
+常见错误：
+
+- `BAD_REQUEST`：文件 ID 格式不合法。
+- `FILE_NOT_FOUND`：文件不存在、任务未完成或文件已被清理。
+
+## 错误码
+
+| code | 含义 |
+|---|---|
+| `BAD_REQUEST` | 请求格式错误 |
+| `INVALID_URL` | URL 或输入校验失败 |
+| `UNSUPPORTED_URL` | 暂未支持的链接类型 |
+| `YTDLP_NOT_FOUND` | 未安装 `yt-dlp` |
+| `YTDLP_FAILED` | `yt-dlp` 解析或下载失败 |
+| `TASK_NOT_FOUND` | 任务不存在 |
+| `FILE_NOT_FOUND` | 文件不存在 |
+| `TASK_FAILED` | 任务失败 |
+| `INTERNAL_ERROR` | 服务端内部错误 |
