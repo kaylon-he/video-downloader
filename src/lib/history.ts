@@ -37,39 +37,41 @@ export async function upsertHistory(input: {
   status: DownloadStatus;
   progress: number;
 }): Promise<void> {
-  const items = await readHistory();
-  const now = Date.now();
-  const current = input.historyId
-    ? items.find((item) => item.id === input.historyId)
-    : items.find((item) => item.taskId === input.taskId);
+  await withHistoryLock(async () => {
+    const items = await readHistory();
+    const now = Date.now();
+    const current = input.historyId
+      ? items.find((item) => item.id === input.historyId)
+      : items.find((item) => item.taskId === input.taskId);
 
-  if (current) {
-    const rest = { ...input };
-    delete rest.historyId;
-    Object.assign(current, {
-      ...compact(rest),
-      updatedAt: now,
-      source: "download" as const,
-    });
-  } else {
-    items.push({
-      id: randomUUID(),
-      taskId: input.taskId,
-      url: input.url,
-      title: input.title || "未命名视频",
-      thumbnail: input.thumbnail,
-      duration: input.duration,
-      browserMedia: input.browserMedia,
-      formatId: input.formatId,
-      status: input.status,
-      progress: input.progress,
-      source: "download",
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
+    if (current) {
+      const rest = { ...input };
+      delete rest.historyId;
+      Object.assign(current, {
+        ...compact(rest),
+        updatedAt: now,
+        source: "download" as const,
+      });
+    } else {
+      items.push({
+        id: randomUUID(),
+        taskId: input.taskId,
+        url: input.url,
+        title: input.title || "未命名视频",
+        thumbnail: input.thumbnail,
+        duration: input.duration,
+        browserMedia: input.browserMedia,
+        formatId: input.formatId,
+        status: input.status,
+        progress: input.progress,
+        source: "download",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
-  await writeHistory(items);
+    await writeHistory(items);
+  });
 }
 
 export async function createHistoryItem(input: {
@@ -81,24 +83,26 @@ export async function createHistoryItem(input: {
   formats?: VideoFormat[];
   browserMedia?: BrowserMedia;
 }): Promise<HistoryItem> {
-  const items = await readHistory();
-  const now = Date.now();
-  const item: HistoryItem = {
-    id: randomUUID(),
-    url: input.url,
-    title: input.title || input.url || "未命名任务",
-    status: input.status,
-    progress: input.progress ?? 0,
-    error: input.error,
-    formats: input.formats,
-    browserMedia: input.browserMedia,
-    source: "download",
-    createdAt: now,
-    updatedAt: now,
-  };
-  items.push(item);
-  await writeHistory(items);
-  return item;
+  return withHistoryLock(async () => {
+    const items = await readHistory();
+    const now = Date.now();
+    const item: HistoryItem = {
+      id: randomUUID(),
+      url: input.url,
+      title: input.title || input.url || "未命名任务",
+      status: input.status,
+      progress: input.progress ?? 0,
+      error: input.error,
+      formats: input.formats,
+      browserMedia: input.browserMedia,
+      source: "download",
+      createdAt: now,
+      updatedAt: now,
+    };
+    items.push(item);
+    await writeHistory(items);
+    return item;
+  });
 }
 
 export async function createUploadHistoryItem(input: {
@@ -107,26 +111,49 @@ export async function createUploadHistoryItem(input: {
   originalName: string;
   fileSize: number;
 }): Promise<HistoryItem> {
-  const items = await readHistory();
-  const now = Date.now();
-  const duration = await probeDuration(input.filename);
-  const thumbnail = await ensureThumbnail(input.fileId, input.filename);
-  const item: HistoryItem = {
+  let item: HistoryItem = {
     id: randomUUID(),
     title: path.parse(input.originalName).name || input.originalName || "上传视频",
     status: "done",
     progress: 100,
-    duration,
     fileId: input.fileId,
     filename: input.filename,
     fileSize: input.fileSize,
-    thumbnail,
     source: "upload",
-    createdAt: now,
-    updatedAt: now,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
-  items.push(item);
-  await writeHistory(items);
+
+  item = await withHistoryLock(async () => {
+    const items = await readHistory();
+    const existingIndex = items.findIndex((current) => current.fileId === input.fileId);
+    if (existingIndex >= 0) {
+      item = { ...items[existingIndex], ...item, id: items[existingIndex].id };
+      items[existingIndex] = item;
+    } else {
+      items.push(item);
+    }
+    await writeHistory(items);
+    return item;
+  });
+
+  const [duration, thumbnail] = await Promise.all([
+    probeDuration(input.filename),
+    ensureThumbnail(input.fileId, input.filename),
+  ]);
+  if (duration || thumbnail) {
+    item = await withHistoryLock(async () => {
+      const items = await readHistory();
+      const index = items.findIndex((current) => current.id === item.id);
+      if (index === -1) {
+        return item;
+      }
+      const enriched = { ...items[index], duration, thumbnail, updatedAt: Date.now() };
+      items[index] = enriched;
+      await writeHistory(items);
+      return enriched;
+    });
+  }
   return item;
 }
 
@@ -136,38 +163,44 @@ export async function getHistoryItem(id: string): Promise<HistoryItem | undefine
 }
 
 export async function deleteHistoryItem(id: string): Promise<HistoryItem | undefined> {
-  const items = await readHistory();
-  const current = items.find((item) => item.id === id);
-  if (!current) {
-    return undefined;
-  }
+  return withHistoryLock(async () => {
+    const items = await readHistory();
+    const current = items.find((item) => item.id === id);
+    if (!current) {
+      return undefined;
+    }
 
-  const kept = items.filter((item) => item.id !== id);
-  await removeHistoryFiles(current);
-  await writeHistory(kept);
-  return current;
+    const kept = items.filter((item) => item.id !== id);
+    await removeHistoryFiles(current);
+    await writeHistory(kept);
+    return current;
+  });
 }
 
 export async function updateHistoryById(id: string, patch: HistoryPatch): Promise<void> {
-  const items = await readHistory();
-  const current = items.find((item) => item.id === id);
-  if (!current) {
-    return;
-  }
+  await withHistoryLock(async () => {
+    const items = await readHistory();
+    const current = items.find((item) => item.id === id);
+    if (!current) {
+      return;
+    }
 
-  Object.assign(current, patch, { updatedAt: Date.now() });
-  await writeHistory(items);
+    Object.assign(current, patch, { updatedAt: Date.now() });
+    await writeHistory(items);
+  });
 }
 
 export async function updateHistoryByTaskId(taskId: string, patch: HistoryPatch): Promise<void> {
-  const items = await readHistory();
-  const current = items.find((item) => item.taskId === taskId);
-  if (!current) {
-    return;
-  }
+  await withHistoryLock(async () => {
+    const items = await readHistory();
+    const current = items.find((item) => item.taskId === taskId);
+    if (!current) {
+      return;
+    }
 
-  Object.assign(current, patch, { updatedAt: Date.now() });
-  await writeHistory(items);
+    Object.assign(current, patch, { updatedAt: Date.now() });
+    await writeHistory(items);
+  });
 }
 
 export async function resolveHistoryFile(fileId: string): Promise<string | null> {
@@ -180,56 +213,73 @@ export async function resolveHistoryFile(fileId: string): Promise<string | null>
     }
   }
 
-  const storageDir = getStorageDir();
-  const files = await safeReaddir(storageDir);
-  const match = files.find((name) => {
-    const parsed = path.parse(name);
-    return getVideoFileId(name) === fileId && VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase());
-  });
-
-  return match ? path.join(storageDir, match) : null;
+  for (const directory of [getStorageDir(), getUploadDir()]) {
+    const files = await safeReaddir(directory);
+    const match = files.find((name) => {
+      const parsed = path.parse(name);
+      return getVideoFileId(name) === fileId && VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase());
+    });
+    if (match) {
+      return path.join(directory, match);
+    }
+  }
+  return null;
 }
 
 async function ensureRecoveredFiles(): Promise<HistoryItem[]> {
+  return withHistoryLock(ensureRecoveredFilesLocked);
+}
+
+async function ensureRecoveredFilesLocked(): Promise<HistoryItem[]> {
   await fs.mkdir(getStorageDir(), { recursive: true });
   await fs.mkdir(getUploadDir(), { recursive: true });
   const rawItems = await readHistory();
   const items = await enrichExistingItems(await pruneInvalidRecoveredItems(rawItems));
   const knownFileIds = new Set(items.map((item) => item.fileId).filter(Boolean));
-  const files = await safeReaddir(getStorageDir());
+  const directories: Array<{ path: string; source: "recovered" | "upload" }> = [
+    { path: getStorageDir(), source: "recovered" },
+    { path: getUploadDir(), source: "upload" },
+  ];
   let changed = items.length !== rawItems.length;
 
-  for (const name of files) {
-    const parsed = path.parse(name);
-    const fileId = getVideoFileId(name);
-    if (!VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase()) || !fileId || knownFileIds.has(fileId)) {
-      continue;
-    }
+  for (const directory of directories) {
+    const files = await safeReaddir(directory.path);
+    for (const name of files) {
+      const parsed = path.parse(name);
+      const fileId = getVideoFileId(name);
+      if (!VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase()) || !fileId || knownFileIds.has(fileId)) {
+        continue;
+      }
 
-    const filename = path.join(getStorageDir(), name);
-    const stat = await fs.stat(filename);
-    if (stat.size === 0) {
-      continue;
+      const filename = path.join(directory.path, name);
+      const stat = await fs.stat(filename);
+      if (stat.size === 0) {
+        continue;
+      }
+      const duration = directory.source === "recovered" ? await probeDuration(filename) : undefined;
+      if (directory.source === "recovered" && !duration) {
+        continue;
+      }
+      const title = directory.source === "upload"
+        ? parsed.name.replace(UUID_PREFIX, "").replace(/^-/, "") || "上传视频"
+        : `本地文件 ${name}`;
+      items.push({
+        id: randomUUID(),
+        title,
+        duration,
+        status: "done",
+        progress: 100,
+        fileId,
+        filename,
+        fileSize: stat.size,
+        thumbnail: await ensureThumbnail(fileId, filename),
+        source: directory.source,
+        createdAt: stat.birthtimeMs || stat.mtimeMs,
+        updatedAt: stat.mtimeMs,
+      });
+      knownFileIds.add(fileId);
+      changed = true;
     }
-    const duration = await probeDuration(filename);
-    if (!duration) {
-      continue;
-    }
-    items.push({
-      id: randomUUID(),
-      title: `本地文件 ${name}`,
-      duration,
-      status: "done",
-      progress: 100,
-      fileId,
-      filename,
-      fileSize: stat.size,
-      thumbnail: await ensureThumbnail(fileId, filename),
-      source: "recovered",
-      createdAt: stat.birthtimeMs || stat.mtimeMs,
-      updatedAt: stat.mtimeMs,
-    });
-    changed = true;
   }
 
   if (changed) {
@@ -296,12 +346,17 @@ async function enrichExistingItems(items: HistoryItem[]): Promise<HistoryItem[]>
 }
 
 async function findLocalVideo(fileId: string): Promise<string | undefined> {
-  const files = await safeReaddir(getStorageDir());
-  const match = files.find((name) => {
-    const parsed = path.parse(name);
-    return getVideoFileId(name) === fileId && VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase());
-  });
-  return match ? path.join(getStorageDir(), match) : undefined;
+  for (const directory of [getStorageDir(), getUploadDir()]) {
+    const files = await safeReaddir(directory);
+    const match = files.find((name) => {
+      const parsed = path.parse(name);
+      return getVideoFileId(name) === fileId && VIDEO_EXTENSIONS.has(parsed.ext.toLowerCase());
+    });
+    if (match) {
+      return path.join(directory, match);
+    }
+  }
+  return undefined;
 }
 
 async function removeHistoryFiles(item: HistoryItem): Promise<void> {
@@ -339,8 +394,8 @@ async function pruneInvalidRecoveredItems(items: HistoryItem[]): Promise<History
     if (stat.size === 0) {
       continue;
     }
-    const duration = item.duration || (await probeDuration(item.filename));
-    if (!duration) {
+    const duration = item.duration || (item.source === "upload" ? undefined : await probeDuration(item.filename));
+    if (!duration && item.source !== "upload") {
       continue;
     }
     kept.push({ ...item, duration, fileSize: stat.size, updatedAt: item.updatedAt || stat.mtimeMs });
@@ -364,6 +419,14 @@ async function writeHistory(items: HistoryItem[]): Promise<void> {
   const tmpFile = `${historyFile}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await fs.writeFile(tmpFile, `${JSON.stringify(items, null, 2)}\n`, "utf8");
   await fs.rename(tmpFile, historyFile);
+}
+
+let historyQueue: Promise<void> = Promise.resolve();
+
+function withHistoryLock<T>(operation: () => Promise<T>): Promise<T> {
+  const result = historyQueue.then(operation, operation);
+  historyQueue = result.then(() => undefined, () => undefined);
+  return result;
 }
 
 function getHistoryFile(): string {

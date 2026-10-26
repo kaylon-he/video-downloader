@@ -5,7 +5,6 @@ import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { resolveHistoryFile } from "@/lib/history";
 import { getStorageDir } from "@/lib/storage";
-import { getTaskByFileId } from "@/lib/tasks";
 import { fail } from "@/lib/types";
 import { validateFileId, ValidationError } from "@/lib/validate";
 
@@ -19,9 +18,7 @@ type RouteContext = {
 export async function GET(request: Request, { params }: RouteContext) {
   try {
     const fileId = validateFileId(params.id);
-    const task = getTaskByFileId(fileId);
-    const filename =
-      task?.status === "done" && task.filename ? task.filename : await resolveHistoryFile(fileId);
+    const filename = await resolveHistoryFile(fileId);
     if (!filename) {
       return NextResponse.json(fail("FILE_NOT_FOUND", "文件不存在或已过期"), { status: 404 });
     }
