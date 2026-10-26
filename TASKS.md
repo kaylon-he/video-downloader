@@ -44,6 +44,7 @@
 | 2.7 | 产物下载 | 存 `storage/` → 临时链接 `GET /api/file/:id` | `app/api/file/[id]/route.ts` | P0 | ✅ |
 | 2.8 | 并发与队列 | 限制同时下载数，排队 | `lib/tasks.ts` | P1 | ✅ |
 | 2.8a | 在线播放接口 | `GET /api/stream/[id]` 支持 Range 视频流 | `app/api/stream/[id]/route.ts` | P1 | ✅ |
+| 2.8b | 本地视频上传接口 | `POST /api/uploads` 保存本地视频，`GET /api/uploads` 展示上传列表，`DELETE /api/uploads/[id]` 删除文件 | `app/api/uploads/*`、`lib/history.ts` | P1 | ✅ |
 | 2.9 | 超时/取消/重试 | 任务异常处理 | `lib/tasks.ts` | P1 | ⬜ |
 
 ## 阶段 3：前端界面
@@ -56,6 +57,7 @@
 | 3.4 | 完成态 | 显示「保存文件」链接 | `components/DownloadButton.tsx` | P0 | ✅ |
 | 3.5 | 统一任务中心 | 解析中、已解析、下载中、完成与历史记录统一展示 | `app/page.tsx`、`lib/history.ts` | P2 | ✅ |
 | 3.5a | 在线播放 | 完成任务显示播放按钮和播放器弹层 | `app/page.tsx` | P2 | ✅ |
+| 3.5b | 下载/上传 Tab | 当前下载能力归入“视频下载”，新增“视频上传”支持本地上传、播放、删除 | `app/page.tsx` | P1 | ✅ |
 | 3.6 | 交互态 | 错误/加载/空态提示 | 各组件 | P1 | ✅ |
 | 3.7 | 响应式 | 移动端适配 | `globals.css` | P2 | ✅ |
 

@@ -1,15 +1,23 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type { ApiResponse, HistoryItem, RecordStatus } from "@/lib/types";
+
+type ActiveTab = "download" | "upload";
 
 export default function Home() {
   const [input, setInput] = useState("");
   const [items, setItems] = useState<HistoryItem[]>([]);
+  const [uploadItems, setUploadItems] = useState<HistoryItem[]>([]);
   const [formatById, setFormatById] = useState<Record<string, string>>({});
+  const [activeTab, setActiveTab] = useState<ActiveTab>("download");
   const [loading, setLoading] = useState(true);
+  const [uploadLoading, setUploadLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadSubmitting, setUploadSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [playingItem, setPlayingItem] = useState<HistoryItem | null>(null);
 
   const activeCount = useMemo(
@@ -18,13 +26,18 @@ export default function Home() {
   );
 
   const statusText = useMemo(() => {
-    if (loading) return "读取任务";
-    if (activeCount > 0) return `${activeCount} 个任务运行中`;
-    return `${items.length} 个任务`;
-  }, [activeCount, items.length, loading]);
+    if (activeTab === "upload") {
+      if (uploadLoading) return "读取上传视频";
+      return `${uploadItems.length} 个上传视频`;
+    }
+    if (loading) return "读取下载任务";
+    if (activeCount > 0) return `${activeCount} 个下载任务运行中`;
+    return `${items.length} 个下载任务`;
+  }, [activeCount, activeTab, items.length, loading, uploadItems.length, uploadLoading]);
 
   useEffect(() => {
     void loadTasks();
+    void loadUploads();
   }, []);
 
   useEffect(() => {
@@ -48,6 +61,27 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadUploads() {
+    setUploadLoading(true);
+    try {
+      const response = await fetch("/api/uploads");
+      const payload = (await response.json()) as ApiResponse<{ items: HistoryItem[] }>;
+      if (payload.ok) {
+        setUploadItems(payload.data.items);
+      }
+    } finally {
+      setUploadLoading(false);
+    }
+  }
+
+  async function refreshCurrentTab() {
+    if (activeTab === "upload") {
+      await loadUploads();
+      return;
+    }
+    await loadTasks();
   }
 
   async function handleCreateTasks(event: FormEvent<HTMLFormElement>) {
@@ -119,6 +153,58 @@ export default function Home() {
     await loadTasks();
   }
 
+  function handleUploadFilesChange(event: ChangeEvent<HTMLInputElement>) {
+    setUploadError("");
+    setUploadFiles(Array.from(event.target.files || []));
+  }
+
+  async function handleUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setUploadError("");
+    if (uploadFiles.length === 0) {
+      setUploadError("请选择要上传的视频文件");
+      return;
+    }
+
+    setUploadSubmitting(true);
+    const formData = new FormData();
+    uploadFiles.forEach((file) => formData.append("videos", file));
+    const response = await fetch("/api/uploads", {
+      method: "POST",
+      body: formData,
+    });
+    const payload = (await response.json()) as ApiResponse<{ items: HistoryItem[] }>;
+    setUploadSubmitting(false);
+
+    if (!payload.ok) {
+      setUploadError(payload.error.detail || payload.error.message);
+      return;
+    }
+
+    setUploadFiles([]);
+    const form = event.currentTarget;
+    form.reset();
+    await loadUploads();
+  }
+
+  async function handleDeleteUpload(item: HistoryItem) {
+    const confirmed = window.confirm("删除后会同时移除本地上传视频文件，确认删除？");
+    if (!confirmed) {
+      return;
+    }
+
+    setUploadError("");
+    const response = await fetch(`/api/uploads/${item.id}`, {
+      method: "DELETE",
+    });
+    const payload = (await response.json()) as ApiResponse<unknown>;
+    if (!payload.ok) {
+      setUploadError(payload.error.detail || payload.error.message);
+      return;
+    }
+    await loadUploads();
+  }
+
   return (
     <main className="min-h-screen bg-[var(--color-bg)] px-4 py-4 text-[var(--color-fg)] sm:px-6 lg:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-6xl flex-col gap-4">
@@ -127,82 +213,202 @@ export default function Home() {
             <h1 className="text-xl font-semibold">Video Downloader</h1>
             <p className="status-line text-sm text-[var(--color-muted)]">{statusText}</p>
           </div>
-          <button
-            className="min-h-10 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-panel)]"
-            onClick={() => void loadTasks()}
-            type="button"
-          >
-            刷新
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] p-1">
+              <TabButton
+                active={activeTab === "download"}
+                count={items.length}
+                label="视频下载"
+                onClick={() => setActiveTab("download")}
+              />
+              <TabButton
+                active={activeTab === "upload"}
+                count={uploadItems.length}
+                label="视频上传"
+                onClick={() => setActiveTab("upload")}
+              />
+            </div>
+            <button
+              className="min-h-10 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-panel)]"
+              onClick={() => void refreshCurrentTab()}
+              type="button"
+            >
+              刷新
+            </button>
+          </div>
         </header>
 
-        <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-4 sm:p-6">
-          <form className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]" onSubmit={handleCreateTasks}>
-            <label className="min-w-0">
-              <span className="mb-2 block text-sm font-medium text-[var(--color-muted)]">
-                视频链接
-              </span>
-              <textarea
-                className="min-h-28 w-full resize-y rounded-md border border-[var(--color-border)] bg-white px-4 py-3 text-base outline-none transition focus:border-[var(--color-brand)] focus:ring-4 focus:ring-[var(--color-brand-soft)]"
-                placeholder="每行一个链接，也可以只填一个链接"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-              />
-            </label>
-            <button
-              className="self-end rounded-md bg-[var(--color-brand)] px-5 py-3 font-medium text-white transition hover:bg-[var(--color-brand-strong)] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={submitting || !input.trim()}
-              type="submit"
-            >
-              {submitting ? "创建中" : "创建解析任务"}
-            </button>
-          </form>
+        {activeTab === "download" ? (
+          <>
+            <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-4 sm:p-6">
+              <form className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]" onSubmit={handleCreateTasks}>
+                <label className="min-w-0">
+                  <span className="mb-2 block text-sm font-medium text-[var(--color-muted)]">
+                    视频链接
+                  </span>
+                  <textarea
+                    className="min-h-28 w-full resize-y rounded-md border border-[var(--color-border)] bg-white px-4 py-3 text-base outline-none transition focus:border-[var(--color-brand)] focus:ring-4 focus:ring-[var(--color-brand-soft)]"
+                    placeholder="每行一个链接，也可以只填一个链接"
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                  />
+                </label>
+                <button
+                  className="self-end rounded-md bg-[var(--color-brand)] px-5 py-3 font-medium text-white transition hover:bg-[var(--color-brand-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={submitting || !input.trim()}
+                  type="submit"
+                >
+                  {submitting ? "创建中" : "创建解析任务"}
+                </button>
+              </form>
 
-          {error ? (
-            <div className="mt-4 rounded-md border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-4 py-3 text-sm text-[var(--color-danger)]">
-              {error}
-            </div>
-          ) : null}
-        </section>
+              {error ? (
+                <div className="mt-4 rounded-md border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-4 py-3 text-sm text-[var(--color-danger)]">
+                  {error}
+                </div>
+              ) : null}
+            </section>
 
-        <section className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-4 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">任务列表</h2>
-              <p className="status-line text-sm text-[var(--color-muted)]">
-                {loading ? "读取中" : `${items.length} 条记录`}
-              </p>
-            </div>
-          </div>
+            <section className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-4 sm:p-6">
+              <ListHeader loading={loading} title="下载列表" total={items.length} />
 
-          {items.length > 0 ? (
-            <div className="mt-5 grid gap-3">
-              {items.map((item) => (
-                <TaskCard
-                  key={item.id}
-                  item={item}
-                  selectedFormat={formatById[item.id] || item.formatId || item.formats?.[0]?.id || ""}
-                  onDownload={() => void handleDownload(item)}
-                  onFormatChange={(formatId) =>
-                    setFormatById((current) => ({ ...current, [item.id]: formatId }))
-                  }
-                  onRetryParse={() => void handleRetryParse(item)}
-                  onDelete={() => void handleDelete(item)}
-                  onPlay={() => setPlayingItem(item)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-5 grid min-h-[320px] place-items-center rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-muted)]">
-              暂无任务
-            </div>
-          )}
-        </section>
+              {items.length > 0 ? (
+                <div className="mt-5 grid gap-3">
+                  {items.map((item) => (
+                    <TaskCard
+                      key={item.id}
+                      item={item}
+                      selectedFormat={formatById[item.id] || item.formatId || item.formats?.[0]?.id || ""}
+                      onDownload={() => void handleDownload(item)}
+                      onFormatChange={(formatId) =>
+                        setFormatById((current) => ({ ...current, [item.id]: formatId }))
+                      }
+                      onRetryParse={() => void handleRetryParse(item)}
+                      onDelete={() => void handleDelete(item)}
+                      onPlay={() => setPlayingItem(item)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyList label="暂无下载任务" />
+              )}
+            </section>
+          </>
+        ) : (
+          <>
+            <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-4 sm:p-6">
+              <form className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]" onSubmit={handleUpload}>
+                <label className="min-w-0">
+                  <span className="mb-2 block text-sm font-medium text-[var(--color-muted)]">
+                    本地视频
+                  </span>
+                  <input
+                    accept="video/*,.mp4,.mkv,.webm,.mov,.m4v"
+                    className="block w-full rounded-md border border-[var(--color-border)] bg-white px-4 py-3 text-sm outline-none transition file:mr-4 file:rounded-md file:border-0 file:bg-[var(--color-ink)] file:px-4 file:py-2 file:text-sm file:font-medium file:text-white focus:border-[var(--color-brand)] focus:ring-4 focus:ring-[var(--color-brand-soft)]"
+                    multiple
+                    onChange={handleUploadFilesChange}
+                    type="file"
+                  />
+                  <p className="status-line mt-2 text-sm text-[var(--color-muted)]">
+                    {uploadFiles.length > 0
+                      ? `${uploadFiles.length} 个文件待上传`
+                      : "支持 mp4、mkv、webm、mov、m4v"}
+                  </p>
+                </label>
+                <button
+                  className="self-end rounded-md bg-[var(--color-brand)] px-5 py-3 font-medium text-white transition hover:bg-[var(--color-brand-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={uploadSubmitting || uploadFiles.length === 0}
+                  type="submit"
+                >
+                  {uploadSubmitting ? "上传中" : "上传视频"}
+                </button>
+              </form>
+
+              {uploadError ? (
+                <div className="mt-4 rounded-md border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-4 py-3 text-sm text-[var(--color-danger)]">
+                  {uploadError}
+                </div>
+              ) : null}
+            </section>
+
+            <section className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-4 sm:p-6">
+              <ListHeader loading={uploadLoading} title="上传列表" total={uploadItems.length} />
+
+              {uploadItems.length > 0 ? (
+                <div className="mt-5 grid gap-3">
+                  {uploadItems.map((item) => (
+                    <TaskCard
+                      key={item.id}
+                      item={item}
+                      selectedFormat=""
+                      onDownload={() => undefined}
+                      onFormatChange={() => undefined}
+                      onRetryParse={() => undefined}
+                      onDelete={() => void handleDeleteUpload(item)}
+                      onPlay={() => setPlayingItem(item)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyList label="暂无上传视频" />
+              )}
+            </section>
+          </>
+        )}
         {playingItem?.fileId ? (
           <PlayerDialog item={playingItem} onClose={() => setPlayingItem(null)} />
         ) : null}
       </div>
     </main>
+  );
+}
+
+function TabButton({
+  active,
+  count,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`min-h-9 rounded px-3 text-sm font-medium transition ${
+        active
+          ? "bg-[var(--color-ink)] text-white"
+          : "text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+      <span className="ml-2 tabular-nums">{count}</span>
+    </button>
+  );
+}
+
+function ListHeader({ loading, title, total }: { loading: boolean; title: string; total: number }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <p className="status-line text-sm text-[var(--color-muted)]">
+          {loading ? "读取中" : `${total} 条记录`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EmptyList({ label }: { label: string }) {
+  return (
+    <div className="mt-5 grid min-h-[320px] place-items-center rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-muted)]">
+      {label}
+    </div>
   );
 }
 

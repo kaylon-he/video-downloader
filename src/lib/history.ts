@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ensureThumbnail, probeDuration } from "./media";
-import { getStorageDir } from "./storage";
+import { getStorageDir, getUploadDir } from "./storage";
 import type { BrowserMedia, DownloadStatus, HistoryItem, RecordStatus, VideoFormat } from "./types";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".webm", ".mov", ".m4v"]);
@@ -13,6 +13,16 @@ type HistoryPatch = Partial<Omit<HistoryItem, "id" | "createdAt">>;
 export async function listHistory(): Promise<HistoryItem[]> {
   const items = await ensureRecoveredFiles();
   return items.sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export async function listDownloadHistory(): Promise<HistoryItem[]> {
+  const items = await listHistory();
+  return items.filter((item) => item.source !== "upload");
+}
+
+export async function listUploadHistory(): Promise<HistoryItem[]> {
+  const items = await listHistory();
+  return items.filter((item) => item.source === "upload");
 }
 
 export async function upsertHistory(input: {
@@ -91,6 +101,35 @@ export async function createHistoryItem(input: {
   return item;
 }
 
+export async function createUploadHistoryItem(input: {
+  fileId: string;
+  filename: string;
+  originalName: string;
+  fileSize: number;
+}): Promise<HistoryItem> {
+  const items = await readHistory();
+  const now = Date.now();
+  const duration = await probeDuration(input.filename);
+  const thumbnail = await ensureThumbnail(input.fileId, input.filename);
+  const item: HistoryItem = {
+    id: randomUUID(),
+    title: path.parse(input.originalName).name || input.originalName || "上传视频",
+    status: "done",
+    progress: 100,
+    duration,
+    fileId: input.fileId,
+    filename: input.filename,
+    fileSize: input.fileSize,
+    thumbnail,
+    source: "upload",
+    createdAt: now,
+    updatedAt: now,
+  };
+  items.push(item);
+  await writeHistory(items);
+  return item;
+}
+
 export async function getHistoryItem(id: string): Promise<HistoryItem | undefined> {
   const items = await listHistory();
   return items.find((item) => item.id === id);
@@ -153,6 +192,7 @@ export async function resolveHistoryFile(fileId: string): Promise<string | null>
 
 async function ensureRecoveredFiles(): Promise<HistoryItem[]> {
   await fs.mkdir(getStorageDir(), { recursive: true });
+  await fs.mkdir(getUploadDir(), { recursive: true });
   const rawItems = await readHistory();
   const items = await enrichExistingItems(await pruneInvalidRecoveredItems(rawItems));
   const knownFileIds = new Set(items.map((item) => item.fileId).filter(Boolean));
@@ -288,7 +328,7 @@ async function removeHistoryFiles(item: HistoryItem): Promise<void> {
 async function pruneInvalidRecoveredItems(items: HistoryItem[]): Promise<HistoryItem[]> {
   const kept: HistoryItem[] = [];
   for (const item of items) {
-    if (item.source !== "recovered") {
+    if (item.source !== "recovered" && item.source !== "upload") {
       kept.push(item);
       continue;
     }

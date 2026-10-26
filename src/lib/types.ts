@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | "BAD_REQUEST"
   | "INVALID_URL"
   | "UNSUPPORTED_URL"
+  | "UNSUPPORTED_FILE"
   | "YTDLP_NOT_FOUND"
   | "YTDLP_FAILED"
   | "TASK_NOT_FOUND"
@@ -90,7 +91,7 @@ export type HistoryItem = {
   filename?: string;
   fileSize?: number;
   error?: string;
-  source: "download" | "recovered";
+  source: "download" | "recovered" | "upload";
   createdAt: number;
   updatedAt: number;
 };
