@@ -12,6 +12,8 @@ type HomeProps = {
 export default function Home({ searchParams }: HomeProps) {
   const [input, setInput] = useState("");
   const [items, setItems] = useState<HistoryItem[]>([]);
+  const taskListRevision = useRef(0);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [uploadItems, setUploadItems] = useState<HistoryItem[]>([]);
   const uploadListRevision = useRef(0);
   const [formatById, setFormatById] = useState<Record<string, string>>({});
@@ -23,6 +25,7 @@ export default function Home({ searchParams }: HomeProps) {
   const [submitting, setSubmitting] = useState(false);
   const [uploadSubmitting, setUploadSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState(0);
   const [error, setError] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
@@ -88,11 +91,12 @@ export default function Home({ searchParams }: HomeProps) {
   }, [activeCount]);
 
   async function loadTasks() {
+    const revision = ++taskListRevision.current;
     setLoading(true);
     try {
       const response = await fetch("/api/tasks");
       const payload = (await response.json()) as ApiResponse<{ items: HistoryItem[] }>;
-      if (payload.ok) {
+      if (payload.ok && revision === taskListRevision.current) {
         setItems(payload.data.items);
       }
     } finally {
@@ -178,23 +182,37 @@ export default function Home({ searchParams }: HomeProps) {
   }
 
   async function handleDelete(item: HistoryItem) {
+    const isActive = ["parsing", "pending", "running"].includes(item.status);
     const confirmed = window.confirm(
-      item.fileId ? "删除后会同时移除本地视频文件，确认删除？" : "确认删除这条任务？",
+      isActive ? "删除后会停止当前任务并清理本地文件，确认删除？"
+        : item.fileId ? "删除后会同时移除本地视频文件，确认删除？" : "确认删除这条任务？",
     );
     if (!confirmed) {
       return;
     }
 
     setError("");
-    const response = await fetch(`/api/tasks/${item.id}`, {
-      method: "DELETE",
-    });
-    const payload = (await response.json()) as ApiResponse<unknown>;
-    if (!payload.ok) {
-      setError(payload.error.detail || payload.error.message);
-      return;
+    setDeletingIds((current) => new Set(current).add(item.id));
+    try {
+      const response = await fetch(`/api/tasks/${item.id}`, { method: "DELETE" });
+      const payload = (await response.json()) as ApiResponse<unknown>;
+      if (!payload.ok) {
+        setError(payload.error.detail || payload.error.message);
+        return;
+      }
+      taskListRevision.current += 1;
+      setItems((current) => current.filter((record) => record.id !== item.id));
+      if (playingItem?.id === item.id) setPlayingItem(null);
+      await loadTasks();
+    } catch {
+      setError("删除失败，请检查网络后重试");
+    } finally {
+      setDeletingIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
     }
-    await loadTasks();
   }
 
   function handleUploadFilesChange(event: ChangeEvent<HTMLInputElement>) {
@@ -213,18 +231,35 @@ export default function Home({ searchParams }: HomeProps) {
 
     setUploadSubmitting(true);
     setUploadProgress(0);
+    setUploadSpeed(0);
     const formData = new FormData();
     uploadFiles.forEach((file) => formData.append("videos", file));
 
     try {
       const payload = await new Promise<ApiResponse<{ items: HistoryItem[] }>>((resolve, reject) => {
         const request = new XMLHttpRequest();
+        let sentBytes = 0;
+        let previousBytes = 0;
+        let previousTime = performance.now();
+        const speedTimer = window.setInterval(() => {
+          const now = performance.now();
+          setUploadSpeed(Math.max(0, (sentBytes - previousBytes) * 1000 / Math.max(1, now - previousTime)));
+          previousBytes = sentBytes;
+          previousTime = now;
+        }, 500);
         request.open("POST", "/api/uploads");
         request.upload.addEventListener("progress", (progressEvent) => {
+          sentBytes = progressEvent.loaded;
           if (progressEvent.lengthComputable) {
             setUploadProgress(Math.min(100, Math.round((progressEvent.loaded / progressEvent.total) * 100)));
           }
         });
+        request.upload.addEventListener("load", () => {
+          window.clearInterval(speedTimer);
+          setUploadSpeed(0);
+          setUploadProgress(100);
+        });
+        request.addEventListener("loadend", () => window.clearInterval(speedTimer));
         request.addEventListener("load", () => {
           let responsePayload: ApiResponse<{ items: HistoryItem[] }>;
           try {
@@ -299,7 +334,7 @@ export default function Home({ searchParams }: HomeProps) {
             <p className="status-line text-sm text-[var(--color-muted)]">{statusText}</p>
           </div>
           <button
-            className="min-h-10 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-panel)]"
+            className="min-h-11 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-panel)]"
             onClick={() => void refreshCurrentTab()}
             type="button"
           >
@@ -365,6 +400,7 @@ export default function Home({ searchParams }: HomeProps) {
                     <TaskCard
                       key={item.id}
                       item={item}
+                      deleting={deletingIds.has(item.id)}
                       selectedFormat={formatById[item.id] || item.formatId || item.formats?.[0]?.id || ""}
                       onDownload={() => void handleDownload(item)}
                       onFormatChange={(formatId) =>
@@ -377,7 +413,7 @@ export default function Home({ searchParams }: HomeProps) {
                   ))}
                 </div>
               ) : (
-                <EmptyList label="暂无下载任务" />
+                <EmptyList label={loading ? "正在读取下载任务…" : "暂无下载任务"} />
               )}
             </section>
           </>
@@ -399,9 +435,11 @@ export default function Home({ searchParams }: HomeProps) {
                   />
                   {uploadSubmitting ? (
                     <div className="mt-3" aria-live="polite">
-                      <div className="mb-1 flex items-center justify-between gap-3 text-sm text-[var(--color-muted)]">
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--color-muted)]">
                         <span>{uploadProgress >= 100 ? "文件已传完，正在保存记录…" : "正在上传视频…"}</span>
-                        <span className="tabular-nums">{uploadProgress}%</span>
+                        <span className="tabular-nums">
+                          {uploadProgress < 100 ? `上传速度 ${formatBytes(uploadSpeed)}/s · ` : ""}{uploadProgress}%
+                        </span>
                       </div>
                       <div
                         aria-label="上传进度"
@@ -460,7 +498,7 @@ export default function Home({ searchParams }: HomeProps) {
                   ))}
                 </div>
               ) : (
-                <EmptyList label="暂无上传视频" />
+                <EmptyList label={uploadLoading ? "正在读取上传视频…" : "暂无上传视频"} />
               )}
             </section>
           </>
@@ -524,6 +562,7 @@ function EmptyList({ label }: { label: string }) {
 
 function TaskCard({
   item,
+  deleting = false,
   selectedFormat,
   onDownload,
   onFormatChange,
@@ -532,6 +571,7 @@ function TaskCard({
   onPlay,
 }: {
   item: HistoryItem;
+  deleting?: boolean;
   selectedFormat: string;
   onDownload: () => void;
   onFormatChange: (formatId: string) => void;
@@ -582,7 +622,8 @@ function TaskCard({
       <div className="grid min-w-0 gap-2 lg:w-[220px]">
         {canChooseFormat ? (
           <select
-            className="h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 text-sm outline-none transition focus:border-[var(--color-brand)] focus:ring-4 focus:ring-[var(--color-brand-soft)]"
+            className="h-11 w-full rounded-md border border-[var(--color-border)] bg-white px-3 text-sm outline-none transition focus:border-[var(--color-brand)] focus:ring-4 focus:ring-[var(--color-brand-soft)]"
+            disabled={deleting}
             value={selectedFormat}
             onChange={(event) => onFormatChange(event.target.value)}
           >
@@ -597,22 +638,26 @@ function TaskCard({
         {item.status === "done" && item.fileId ? (
           <>
             <button
-              className="min-h-10 rounded-md bg-[var(--color-ink)] px-4 text-sm font-medium text-white transition hover:bg-black"
+              className="min-h-11 rounded-md bg-[var(--color-ink)] px-4 text-sm font-medium text-white transition hover:bg-black"
+              disabled={deleting}
               onClick={onPlay}
               type="button"
             >
               播放
             </button>
             <a
-              className="flex min-h-10 items-center justify-center rounded-md bg-[var(--color-brand)] px-4 text-sm font-medium text-white transition hover:bg-[var(--color-brand-strong)]"
+              className="flex min-h-11 items-center justify-center rounded-md bg-[var(--color-brand)] px-4 text-sm font-medium text-white transition hover:bg-[var(--color-brand-strong)]"
               href={`/api/file/${item.fileId}`}
+              aria-disabled={deleting}
+              onClick={(event) => { if (deleting) event.preventDefault(); }}
             >
               下载文件
             </a>
           </>
         ) : canDownload ? (
           <button
-            className="min-h-10 rounded-md bg-[var(--color-ink)] px-4 text-sm font-medium text-white transition hover:bg-black"
+            className="min-h-11 rounded-md bg-[var(--color-ink)] px-4 text-sm font-medium text-white transition hover:bg-black"
+            disabled={deleting}
             onClick={onDownload}
             type="button"
           >
@@ -620,7 +665,8 @@ function TaskCard({
           </button>
         ) : item.status === "parse_failed" ? (
           <button
-            className="min-h-10 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-surface)]"
+            className="min-h-11 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-surface)]"
+            disabled={deleting}
             onClick={onRetryParse}
             type="button"
           >
@@ -630,12 +676,12 @@ function TaskCard({
           <span className="text-right text-sm text-[var(--color-muted)]">{Math.round(item.progress)}%</span>
         )}
         <button
-          className="min-h-10 rounded-md border border-[var(--color-danger-border)] px-4 text-sm font-medium text-[var(--color-danger)] transition hover:bg-[var(--color-danger-bg)] disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={isActive}
+          className="min-h-11 rounded-md border border-[var(--color-danger-border)] px-4 text-sm font-medium text-[var(--color-danger)] transition hover:bg-[var(--color-danger-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={deleting}
           onClick={onDelete}
           type="button"
         >
-          删除
+          {deleting ? "删除中…" : "删除"}
         </button>
       </div>
     </article>
@@ -663,7 +709,7 @@ function PlayerDialog({ item, onClose }: { item: HistoryItem; onClose: () => voi
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--color-border)] px-4 py-3">
           <h2 className="min-w-0 truncate text-base font-semibold">{item.title}</h2>
           <button
-            className="min-h-10 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-surface)]"
+            className="min-h-11 rounded-md border border-[var(--color-border)] px-4 text-sm font-medium transition hover:bg-[var(--color-surface)]"
             onClick={onClose}
             type="button"
           >

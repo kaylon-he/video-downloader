@@ -44,6 +44,9 @@ export async function upsertHistory(input: {
       ? items.find((item) => item.id === input.historyId)
       : items.find((item) => item.taskId === input.taskId);
 
+    // 用户删除原任务后，迟到的下载创建请求不能重新插入该记录。
+    if (input.historyId && !current) throw new Error("任务已删除");
+
     if (current) {
       const rest = { ...input };
       delete rest.historyId;
@@ -365,6 +368,12 @@ async function removeHistoryFiles(item: HistoryItem): Promise<void> {
     filenames.add(item.filename);
   }
   if (item.fileId) {
+    // 清理合并前的音视频分片、.part 等残留，不能只删最终视频。
+    for (const name of await safeReaddir(getStorageDir())) {
+      if (name.startsWith(`${item.fileId}.`) || name.startsWith(`${item.fileId}-`)) {
+        filenames.add(path.join(getStorageDir(), name));
+      }
+    }
     const localVideo = await findLocalVideo(item.fileId);
     if (localVideo) {
       filenames.add(localVideo);
@@ -421,11 +430,11 @@ async function writeHistory(items: HistoryItem[]): Promise<void> {
   await fs.rename(tmpFile, historyFile);
 }
 
-let historyQueue: Promise<void> = Promise.resolve();
-
 function withHistoryLock<T>(operation: () => Promise<T>): Promise<T> {
-  const result = historyQueue.then(operation, operation);
-  historyQueue = result.then(() => undefined, () => undefined);
+  // 不同 API 路由和热更新可能分别加载本模块，文件锁队列必须共享。
+  const shared = globalThis as typeof globalThis & { __videoHistoryQueue?: Promise<void> };
+  const result = (shared.__videoHistoryQueue ?? Promise.resolve()).then(operation, operation);
+  shared.__videoHistoryQueue = result.then(() => undefined, () => undefined);
   return result;
 }
 

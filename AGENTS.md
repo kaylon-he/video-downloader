@@ -108,6 +108,10 @@ video-downloader/
 
 ## 9. 快速开始（开发者）
 
+任务删除支持所有状态：先停止解析/下载进程并移除排队任务，等待退出后删除记录、视频、分片及缩略图；取消后的回调禁止恢复记录。任务取消信号通过 `lib/ytdlp.ts` 传递至 yt-dlp/ffmpeg 及浏览器解析，macOS/Linux 结束进程组以避免合并进程残留。
+
+上传页面通过 XMLHttpRequest 进度事件累计已传字节，每半秒显示传输速度（KB/s 或 MB/s）；文件传完后显示保存记录状态。
+
 ```bash
 # 1. 安装外部依赖（yt-dlp + ffmpeg）
 bash scripts/setup.sh

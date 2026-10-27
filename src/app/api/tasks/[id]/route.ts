@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { deleteHistoryItem, getHistoryItem } from "@/lib/history";
-import { retryParseTask } from "@/lib/parse-tasks";
+import { cancelParseTask, retryParseTask } from "@/lib/parse-tasks";
+import { cancelDownloadTask } from "@/lib/tasks";
 import { fail, ok } from "@/lib/types";
 import { validateVideoUrl, ValidationError } from "@/lib/validate";
 
@@ -41,10 +42,8 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
     if (!item) {
       return NextResponse.json(fail("TASK_NOT_FOUND", "任务不存在"), { status: 404 });
     }
-    if (ACTIVE_STATUSES.has(item.status)) {
-      return NextResponse.json(fail("BAD_REQUEST", "运行中的任务暂不能删除"), { status: 400 });
-    }
-
+    await cancelParseTask(item.id);
+    if (item.taskId) await cancelDownloadTask(item.taskId);
     await deleteHistoryItem(item.id);
     return NextResponse.json(ok({ id: item.id }));
   } catch (error) {

@@ -8,6 +8,7 @@ type ParseStore = {
   queue: string[];
   running: number;
   urls: Map<string, string>;
+  active: Map<string, { controller: AbortController; completion: Promise<void> }>;
 };
 
 const store = getStore();
@@ -23,9 +24,11 @@ function getStore(): ParseStore {
       queue: [],
       running: 0,
       urls: new Map<string, string>(),
+      active: new Map(),
     };
   }
 
+  globalObject[globalKey].active ??= new Map();
   return globalObject[globalKey];
 }
 
@@ -71,6 +74,16 @@ export async function createFailedParseTask(input: {
   });
 }
 
+export async function cancelParseTask(id: string): Promise<void> {
+  store.queue = store.queue.filter((queuedId) => queuedId !== id);
+  store.urls.delete(id);
+  const active = store.active.get(id);
+  if (active) {
+    active.controller.abort();
+    await active.completion;
+  }
+}
+
 async function drainQueue(): Promise<void> {
   while (store.running < MAX_CONCURRENT_PARSE && store.queue.length > 0) {
     const id = store.queue.shift();
@@ -82,17 +95,21 @@ async function drainQueue(): Promise<void> {
       continue;
     }
     store.running += 1;
-    void runParseTask(id, url).finally(() => {
+    const controller = new AbortController();
+    const completion = runParseTask(id, url, controller.signal).finally(() => {
       store.running -= 1;
       store.urls.delete(id);
+      store.active.delete(id);
       void drainQueue();
     });
+    store.active.set(id, { controller, completion });
   }
 }
 
-async function runParseTask(id: string, url: string): Promise<void> {
+async function runParseTask(id: string, url: string, signal: AbortSignal): Promise<void> {
   try {
-    const info = await parseVideoInfo(url);
+    const info = await parseVideoInfo(url, signal);
+    if (signal.aborted) return;
     await updateHistoryById(id, {
       url: info.url,
       title: info.title,
@@ -106,6 +123,7 @@ async function runParseTask(id: string, url: string): Promise<void> {
       error: undefined,
     });
   } catch (error) {
+    if (signal.aborted) return;
     await updateHistoryById(id, {
       status: "parse_failed",
       progress: 0,

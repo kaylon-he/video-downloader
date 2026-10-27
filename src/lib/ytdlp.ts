@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { parseAlibabaWithBrowser, isAlibabaUrl } from "./alibaba-browser";
@@ -36,17 +36,19 @@ export type DownloadProgress = {
   eta?: string;
 };
 
-export async function parseVideoInfo(url: string): Promise<VideoInfo> {
+export async function parseVideoInfo(url: string, signal?: AbortSignal): Promise<VideoInfo> {
+  signal?.throwIfAborted();
   if (isAlibabaUrl(url)) {
-    return parseAlibabaWithBrowser(url);
+    return parseAlibabaWithBrowser(url, signal);
   }
 
   let result: RunResult;
   try {
-    result = await runYtdlp(withCookies(["-J", "--no-playlist", "--no-warnings", url]));
+    result = await runYtdlp(withCookies(["-J", "--no-playlist", "--no-warnings", url]), signal);
   } catch (error) {
+    signal?.throwIfAborted();
     if (isDouyinUrl(url) && isDouyinBrowserFallbackError(error)) {
-      return parseDouyinWithBrowser(url);
+      return parseDouyinWithBrowser(url, signal);
     }
     throw error;
   }
@@ -72,13 +74,16 @@ export async function downloadVideo(options: {
   formatId?: string;
   outputDir: string;
   fileBaseName: string;
+  signal?: AbortSignal;
   onProgress?: (progress: DownloadProgress) => void;
 }): Promise<string> {
+  options.signal?.throwIfAborted();
   if (options.browserMedia) {
     return downloadCapturedMedia({
       browserMedia: options.browserMedia,
       outputDir: options.outputDir,
       fileBaseName: options.fileBaseName,
+      signal: options.signal,
       onProgress: options.onProgress,
     });
   }
@@ -103,7 +108,8 @@ export async function downloadVideo(options: {
   const finalArgs = withCookies(args);
 
   return new Promise((resolve, reject) => {
-    const child = spawn("yt-dlp", finalArgs, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("yt-dlp", finalArgs, { stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+    cancelProcessOnAbort(child, options.signal);
     let stderr = "";
     let finalPath = "";
 
@@ -149,10 +155,12 @@ async function downloadCapturedMedia(options: {
   browserMedia: BrowserMedia;
   outputDir: string;
   fileBaseName: string;
+  signal?: AbortSignal;
   onProgress?: (progress: DownloadProgress) => void;
 }): Promise<string> {
   const outputPath = path.join(options.outputDir, `${options.fileBaseName}.mp4`);
-  const freshInfo = await refreshCapturedMedia(options.browserMedia);
+  const freshInfo = await refreshCapturedMedia(options.browserMedia, options.signal);
+  options.signal?.throwIfAborted();
   const freshMedia = freshInfo.browserMedia || options.browserMedia;
   const args = [
     "-y",
@@ -170,7 +178,8 @@ async function downloadCapturedMedia(options: {
   options.onProgress?.({ progress: 5 });
 
   return new Promise((resolve, reject) => {
-    const child = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+    const child = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"], detached: process.platform !== "win32" });
+    cancelProcessOnAbort(child, options.signal);
     let stderr = "";
 
     child.stderr.setEncoding("utf8");
@@ -195,17 +204,16 @@ async function downloadCapturedMedia(options: {
   });
 }
 
-async function refreshCapturedMedia(media: BrowserMedia): Promise<VideoInfo> {
+async function refreshCapturedMedia(media: BrowserMedia, signal?: AbortSignal): Promise<VideoInfo> {
+  signal?.throwIfAborted();
   if (isDouyinUrl(media.sourceUrl)) {
-    return parseDouyinWithBrowser(media.sourceUrl);
+    return parseDouyinWithBrowser(media.sourceUrl, signal);
   }
   if (isAlibabaUrl(media.sourceUrl)) {
-    return parseAlibabaWithBrowser(media.sourceUrl).catch(() => ({
-      url: media.sourceUrl,
-      title: "1688 商品视频",
-      formats: [],
-      browserMedia: media,
-    }));
+    return parseAlibabaWithBrowser(media.sourceUrl, signal).catch(() => {
+      signal?.throwIfAborted();
+      return { url: media.sourceUrl, title: "1688 商品视频", formats: [], browserMedia: media };
+    });
   }
   return {
     url: media.sourceUrl,
@@ -309,9 +317,11 @@ export function parseProgressLine(line: string): DownloadProgress | null {
   };
 }
 
-function runYtdlp(args: string[]): Promise<RunResult> {
+function runYtdlp(args: string[], signal?: AbortSignal): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] });
+    signal?.throwIfAborted();
+    const child = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+    cancelProcessOnAbort(child, signal);
     let stdout = "";
     let stderr = "";
 
@@ -338,6 +348,22 @@ function runYtdlp(args: string[]): Promise<RunResult> {
       reject(new Error(normalizeYtdlpError(stderr.trim() || `yt-dlp 退出码 ${code}`)));
     });
   });
+}
+
+function cancelProcessOnAbort(child: ChildProcess, signal?: AbortSignal): void {
+  if (!signal) return;
+  const cancel = () => {
+    // macOS/Linux 同时结束进程组，避免 yt-dlp 启动的 ffmpeg 继续写入已删除文件。
+    try {
+      if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGKILL");
+      else child.kill("SIGKILL");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") child.kill("SIGKILL");
+    }
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  child.once("close", () => signal.removeEventListener("abort", cancel));
+  if (signal.aborted) cancel();
 }
 
 function normalizeYtdlpError(message: string): string {

@@ -22,11 +22,15 @@ export function isDouyinUrl(input: string): boolean {
   }
 }
 
-export async function parseDouyinWithBrowser(sourceUrl: string): Promise<VideoInfo> {
+export async function parseDouyinWithBrowser(sourceUrl: string, signal?: AbortSignal): Promise<VideoInfo> {
+  signal?.throwIfAborted();
   const browser = await launchBrowser();
+  const cancel = () => { void browser.close().catch(() => undefined); };
+  signal?.addEventListener("abort", cancel, { once: true });
   let context: BrowserContext | undefined;
 
   try {
+    signal?.throwIfAborted();
     context = await browser.newContext({
       locale: "zh-CN",
       viewport: { width: 1280, height: 800 },
@@ -50,7 +54,7 @@ export async function parseDouyinWithBrowser(sourceUrl: string): Promise<VideoIn
       .evaluate((video) => (video as HTMLVideoElement).play().catch(() => undefined))
       .catch(() => undefined);
 
-    await waitForMedia(candidates, CAPTURE_TIMEOUT_MS);
+    await waitForMedia(candidates, CAPTURE_TIMEOUT_MS, signal);
 
     const video = pickBest(candidates, "video");
     const audio = pickBest(candidates, "audio");
@@ -95,6 +99,7 @@ export async function parseDouyinWithBrowser(sourceUrl: string): Promise<VideoIn
       browserMedia,
     };
   } finally {
+    signal?.removeEventListener("abort", cancel);
     await context?.close().catch(() => undefined);
     await browser.close().catch(() => undefined);
   }
@@ -135,9 +140,10 @@ function toMediaCandidate(url: string, contentType?: string): MediaCandidate | n
   };
 }
 
-async function waitForMedia(candidates: Map<string, MediaCandidate>, timeoutMs: number): Promise<void> {
+async function waitForMedia(candidates: Map<string, MediaCandidate>, timeoutMs: number, signal?: AbortSignal): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
+    signal?.throwIfAborted();
     if (pickBest(candidates, "video")) {
       return;
     }

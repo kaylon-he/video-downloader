@@ -12,6 +12,7 @@ type TaskStore = {
   fileToTask: Map<string, string>;
   queue: string[];
   running: number;
+  active: Map<string, { controller: AbortController; completion: Promise<void> }>;
 };
 
 const store = getStore();
@@ -28,9 +29,11 @@ function getStore(): TaskStore {
       fileToTask: new Map<string, string>(),
       queue: [],
       running: 0,
+      active: new Map(),
     };
   }
 
+  globalObject[globalKey].active ??= new Map();
   return globalObject[globalKey];
 }
 
@@ -69,6 +72,9 @@ export async function createDownloadTask(input: {
     formatId: input.formatId,
     status: task.status,
     progress: task.progress,
+  }).catch((error) => {
+    store.tasks.delete(task.id);
+    throw error;
   });
   store.queue.push(task.id);
   void drainQueue();
@@ -84,6 +90,19 @@ export function getTaskByFileId(fileId: string): DownloadTask | undefined {
   return taskId ? store.tasks.get(taskId) : undefined;
 }
 
+export async function cancelDownloadTask(taskId: string): Promise<void> {
+  store.queue = store.queue.filter((id) => id !== taskId);
+  store.tasks.delete(taskId);
+  for (const [fileId, id] of store.fileToTask) {
+    if (id === taskId) store.fileToTask.delete(fileId);
+  }
+  const active = store.active.get(taskId);
+  if (active) {
+    active.controller.abort();
+    await active.completion;
+  }
+}
+
 async function drainQueue(): Promise<void> {
   while (store.running < MAX_CONCURRENT_DOWNLOADS && store.queue.length > 0) {
     const taskId = store.queue.shift();
@@ -95,14 +114,17 @@ async function drainQueue(): Promise<void> {
       continue;
     }
     store.running += 1;
-    void runTask(task).finally(() => {
+    const controller = new AbortController();
+    const completion = runTask(task, controller.signal).finally(() => {
       store.running -= 1;
+      store.active.delete(taskId);
       void drainQueue();
     });
+    store.active.set(taskId, { controller, completion });
   }
 }
 
-async function runTask(task: DownloadTask): Promise<void> {
+async function runTask(task: DownloadTask, signal: AbortSignal): Promise<void> {
   const fileId = randomUUID();
   store.fileToTask.set(fileId, task.id);
 
@@ -120,6 +142,7 @@ async function runTask(task: DownloadTask): Promise<void> {
       formatId: task.formatId,
       outputDir: getStorageDir(),
       fileBaseName: fileId,
+      signal,
       onProgress: (progress) => {
         updateTask(task.id, {
           progress: progress.progress ?? task.progress,
@@ -130,6 +153,7 @@ async function runTask(task: DownloadTask): Promise<void> {
       },
     });
 
+    if (signal.aborted) return;
     store.fileToTask.set(fileId, task.id);
     const stat = await fs.stat(filename);
     updateTask(task.id, {
@@ -141,6 +165,7 @@ async function runTask(task: DownloadTask): Promise<void> {
       updatedAt: Date.now(),
     });
   } catch (error) {
+    if (signal.aborted) return;
     updateTask(task.id, {
       status: "failed",
       error: error instanceof Error ? error.message : "下载失败",

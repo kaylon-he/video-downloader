@@ -35,7 +35,7 @@
 |---|------|------|--------------|--------|------|
 | 2.1 | 下载接口 | `POST /api/download`：URL + 格式 → 建任务 → 返回 `taskId` | `app/api/download/route.ts` | P0 | ✅ |
 | 2.1a | 任务下载接口 | `POST /api/tasks/[id]/download`：从已解析任务进入下载队列 | `app/api/tasks/[id]/download/route.ts` | P1 | ✅ |
-| 2.1b | 任务删除接口 | `DELETE /api/tasks/[id]`：删除任务记录及本地文件 | `app/api/tasks/[id]/route.ts` | P1 | ✅ |
+| 2.1b | 任务删除接口 | 所有状态支持删除；停止解析/下载进程、移除队列并清理文件和分片，阻止迟到写回 | `app/api/tasks/[id]/route.ts`、`lib/tasks.ts`、`lib/parse-tasks.ts` | P1 | ✅ |
 | 2.2 | 任务管理 | 内存版先行，预留 Redis 接口 | `lib/tasks.ts` | P0 | ✅ |
 | 2.3 | 执行下载 | spawn yt-dlp（m3u8 自动下分片 + AES 解密） | `lib/ytdlp.ts` | P0 | ✅ |
 | 2.4 | 合并转码 | ffmpeg 合并/转 mp4 | `lib/ytdlp.ts` | P0 | ✅ |
@@ -58,6 +58,7 @@
 | 3.5 | 统一任务中心 | 解析中、已解析、下载中、完成与历史记录统一展示 | `app/page.tsx`、`lib/history.ts` | P2 | ✅ |
 | 3.5a | 在线播放 | 完成任务显示播放按钮和播放器弹层 | `app/page.tsx` | P2 | ✅ |
 | 3.5b | 下载/上传 Tab | 当前下载能力归入“视频下载”，新增“视频上传”支持本地上传、播放、删除 | `app/page.tsx` | P1 | ✅ |
+| 3.5c | 上传速度 | 上传期间每半秒更新 KB/s、MB/s，传完后显示保存状态 | `app/page.tsx` | P1 | ✅ |
 | 3.6 | 交互态 | 错误/加载/空态提示 | 各组件 | P1 | ✅ |
 | 3.7 | 响应式 | 移动端适配 | `globals.css` | P2 | ✅ |
 

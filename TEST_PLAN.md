@@ -48,7 +48,7 @@
 | I1a | `POST /api/tasks/parse` | 1.3 | 单条/多行 URL 创建解析任务；非法 URL 生成解析失败记录 | `__tests__/integration/tasks-parse.test.ts` | ⬜ |
 | I2 | `POST /api/download` | 2.1 | 返回 `taskId`，任务进入 pending | `__tests__/integration/download.test.ts` | ⬜ |
 | I2a | `POST /api/tasks/[id]/download` | 2.1a | 已解析任务进入下载队列，状态写回同一条记录 | `__tests__/integration/tasks-download.test.ts` | ⬜ |
-| I2b | `DELETE /api/tasks/[id]` | 2.1b | 删除非运行任务；完成任务同步删除文件和缩略图；运行中任务返回 400 | `__tests__/integration/tasks-delete.test.ts` | ⬜ |
+| I2b | `DELETE /api/tasks/[id]` | 2.1b | 所有状态返回 200；取消解析/下载/排队任务；清理合并前残留；迟到结果不会恢复记录 | `__tests__/unit/task-delete.test.ts`、`__tests__/unit/ytdlp-cancel.test.ts` | ✅ |
 | I3 | `GET /api/progress` | 2.6 | 轮询返回递增进度，最终 done | `__tests__/integration/progress.test.ts` | ⬜ |
 | I4 | `GET /api/file/:id` | 2.7 | 完成后能下到文件，未完成/过期返回 404 | `__tests__/integration/file.test.ts` | ⬜ |
 | I4a | `GET /api/stream/:id` | 2.8a | 返回视频流；Range 请求返回 206 和 `Content-Range` | `__tests__/integration/stream.test.ts` | ⬜ |
@@ -69,6 +69,7 @@
 | E7 | 删除任务 | 3.5 | 点击删除 → 确认 → 任务从列表消失；取消确认不删除 | `e2e/tasks-delete.spec.ts` | ⬜ |
 | E8 | 在线播放 | 3.5a | 点击播放 → 弹出播放器；关闭后回到任务列表 | `e2e/player.spec.ts` | ⬜ |
 | E8a | 视频上传 Tab | 3.5b | 切到视频上传 → 选择本地视频 → 上传后列表出现记录，支持播放和删除 | `e2e/uploads.spec.ts` | ⬜ |
+| E8b | 删除和上传速度 | 2.1b/3.5c | 所有状态删除按钮可用；取消确认保留记录；上传速度更新、停传归零、完成后切换保存状态 | `e2e/delete-upload-speed.spec.ts` | ✅ |
 | E9 | 移动端响应式 | 3.7 | 移动视口下布局正常、可操作 | `e2e/responsive.spec.ts` | ⬜ |
 
 ## 六、脚本测试

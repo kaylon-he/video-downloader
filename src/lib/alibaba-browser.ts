@@ -20,11 +20,15 @@ export function isAlibabaUrl(input: string): boolean {
   }
 }
 
-export async function parseAlibabaWithBrowser(sourceUrl: string): Promise<VideoInfo> {
+export async function parseAlibabaWithBrowser(sourceUrl: string, signal?: AbortSignal): Promise<VideoInfo> {
+  signal?.throwIfAborted();
   const browser = await launchBrowser();
+  const cancel = () => { void browser.close().catch(() => undefined); };
+  signal?.addEventListener("abort", cancel, { once: true });
   let context: BrowserContext | undefined;
 
   try {
+    signal?.throwIfAborted();
     context = await browser.newContext({
       locale: "zh-CN",
       viewport: { width: 1365, height: 900 },
@@ -60,7 +64,7 @@ export async function parseAlibabaWithBrowser(sourceUrl: string): Promise<VideoI
       .catch(() => undefined);
 
     await collectDomMedia(page, candidates, sourceUrl);
-    await waitForMedia(candidates, CAPTURE_TIMEOUT_MS);
+    await waitForMedia(candidates, CAPTURE_TIMEOUT_MS, signal);
     await collectDomMedia(page, candidates, sourceUrl);
 
     const video = pickBest(candidates);
@@ -104,6 +108,7 @@ export async function parseAlibabaWithBrowser(sourceUrl: string): Promise<VideoI
       browserMedia,
     };
   } finally {
+    signal?.removeEventListener("abort", cancel);
     await context?.close().catch(() => undefined);
     await browser.close().catch(() => undefined);
   }
@@ -195,9 +200,10 @@ function extractMediaUrls(text: string, baseUrl: string): string[] {
   return [...values];
 }
 
-async function waitForMedia(candidates: Map<string, MediaCandidate>, timeoutMs: number): Promise<void> {
+async function waitForMedia(candidates: Map<string, MediaCandidate>, timeoutMs: number, signal?: AbortSignal): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
+    signal?.throwIfAborted();
     if (pickBest(candidates)) {
       return;
     }
